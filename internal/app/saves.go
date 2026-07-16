@@ -86,8 +86,8 @@ func (s *SaveInfo) tryParseMetadata(fp string) {
 		return
 	}
 	// Read up to 96KB to find nested gameParameters
-	if len(data) > 98304 {
-		data = data[:98304]
+	if len(data) > 2097152 {
+		data = data[:2097152]
 	}
 	content := preprocessUncivJSON(string(data))
 
