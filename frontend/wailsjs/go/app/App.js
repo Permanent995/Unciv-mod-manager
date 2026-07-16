@@ -34,6 +34,10 @@ export function CheckSelfUpdate() {
   return window['go']['app']['App']['CheckSelfUpdate']();
 }
 
+export function CleanupModBackupMeta() {
+  return window['go']['app']['App']['CleanupModBackupMeta']();
+}
+
 export function CleanupTempFile(arg1) {
   return window['go']['app']['App']['CleanupTempFile'](arg1);
 }
@@ -100,6 +104,10 @@ export function GetDownloadList() {
 
 export function GetUncivInfo() {
   return window['go']['app']['App']['GetUncivInfo']();
+}
+
+export function GetUncivVersion() {
+  return window['go']['app']['App']['GetUncivVersion']();
 }
 
 export function ImportFile(arg1) {

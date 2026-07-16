@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { LaunchUnciv, IsUncivRunning } from '../../wailsjs/go/app/App'
+import { ref, onMounted } from 'vue'
+import { LaunchUnciv, IsUncivRunning, GetUncivVersion } from '../../wailsjs/go/app/App'
 
 const props = defineProps<{
   currentView: string
@@ -27,6 +27,15 @@ const menuItems = [
 
 const launching = ref(false)
 const dragging = ref(false)
+const gameVersion = ref('')
+
+onMounted(async () => {
+  try {
+    gameVersion.value = await GetUncivVersion()
+  } catch {
+    gameVersion.value = ''
+  }
+})
 
 function selectView(id: string) {
   emit('update:view', id)
@@ -85,6 +94,7 @@ function startDrag(e: MouseEvent) {
       <button class="launch-btn" :disabled="launching" @click="launchUnciv">
         {{ launching ? '启动中...' : '▶ 启动 Unciv' }}
       </button>
+      <div v-if="gameVersion" class="game-version">🕹️ Unciv {{ gameVersion }}</div>
     </div>
     <div class="drag-handle" @mousedown="startDrag" :class="{ active: dragging }"></div>
   </div>
@@ -104,6 +114,7 @@ function startDrag(e: MouseEvent) {
 .launch-btn { width: 100%; padding: 10px; background: var(--accent); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 600; }
 .launch-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .launch-btn:hover:not(:disabled) { background: var(--accent-hover); }
+.game-version { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 8px; white-space: nowrap; }
 .drag-handle { position: absolute; top: 0; right: 0; width: 4px; height: 100%; cursor: col-resize; background: transparent; z-index: 10; }
 .drag-handle:hover, .drag-handle.active { background: var(--accent); }
 </style>

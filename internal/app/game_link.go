@@ -1,15 +1,73 @@
 package app
 
 import (
+	"archive/zip"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"unsafe"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+// GetUncivVersion reads the Unciv version from the jar's manifest.
+func (a *App) GetUncivVersion() string {
+	jarPath := filepath.Join(a.config.UncivPath, "Unciv.jar")
+	r, err := zip.OpenReader(jarPath)
+	if err != nil {
+		// Fallback: try GameSettings.json
+		return a.readVersionFromSettings()
+	}
+	defer r.Close()
+
+	for _, f := range r.File {
+		if strings.EqualFold(f.Name, "META-INF/MANIFEST.MF") {
+			rc, err := f.Open()
+			if err != nil {
+				return a.readVersionFromSettings()
+			}
+			defer rc.Close()
+			buf := make([]byte, 4096)
+			n, _ := rc.Read(buf)
+			content := string(buf[:n])
+			for _, line := range strings.Split(content, "\n") {
+				if strings.HasPrefix(line, "Specification-Version:") {
+					v := strings.TrimSpace(strings.TrimPrefix(line, "Specification-Version:"))
+					if v != "" {
+						return v
+					}
+				}
+			}
+		}
+	}
+	return a.readVersionFromSettings()
+}
+
+func (a *App) readVersionFromSettings() string {
+	path := filepath.Join(a.config.UncivPath, "GameSettings.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	// Try lastGameSetup.mapParameters.createdWithVersion
+	// The file is JSON but we don't want to import gjson here,
+	// use a simple string fallback approach
+	content := string(data)
+	marker := `"createdWithVersion":"`
+	i := strings.Index(content, marker)
+	if i < 0 {
+		return ""
+	}
+	i += len(marker)
+	j := strings.Index(content[i:], `"`)
+	if j < 0 {
+		return ""
+	}
+	return content[i : i+j]
+}
 
 // UncivInfo holds information about the detected Unciv installation.
 type UncivInfo struct {

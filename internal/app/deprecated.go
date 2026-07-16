@@ -20,49 +20,7 @@ type deprecatedRule struct {
 	Severity    string // "error" for hard break, "warning" for soft deprecation
 }
 
-// deprecatedRules — update when Unciv changelogs mention removed/renamed unique syntax.
-// Sourced from Unciv Kotlin source @Deprecated annotations.
-var deprecatedRules = []deprecatedRule{
-	// ── 4.19.10 ──
-	{
-		Since: "4.19.10", Severity: "warning",
-		Pattern: "Food consumption by specialists ",
-		Description: "\"Food consumption by specialists\" 已废弃 — specialists 改为占位符 [Specialists]",
-		Replacement: "[relativeAmount]% Food consumption by [Specialists] [cityFilter]",
-	},
-	// ── Countables (never worked) ──
-	{
-		Since: "4.0+", Severity: "error",
-		Pattern: "\"City-States\"",
-		Description: "\"City-States\" 作为可计数项从未实际支持",
-		Replacement: "Remaining [City-State] Civilizations",
-	},
-	// ── Planned deprecations (NOT yet enforced by Unciv, but signposted) ──
-	{
-		Since: "(planned)", Severity: "warning",
-		Pattern: "May create improvements on water resources",
-		Description: "\"May create improvements on water resources\" 计划改为通用施工动作",
-		Replacement: "Can instantly construct a [improvementFilter] improvement <by consuming this unit>",
-	},
-	{
-		Since: "(planned)", Severity: "warning",
-		Pattern: "Spaceship part",
-		Description: "\"Spaceship part\" 将只用于建筑物，单位端计划废弃",
-		Replacement: "使用 Buildings.json 的 \"Spaceship part\"",
-	},
-	{
-		Since: "(planned)", Severity: "warning",
-		Pattern: "Enables nuclear weapon",
-		Description: "\"Enables nuclear weapon\" 计划重构，写法可能变化",
-		Replacement: "关注 Unciv 更新日志",
-	},
-	{
-		Since: "(planned)", Severity: "warning",
-		Pattern: "Enables construction of Spaceship parts",
-		Description: "\"Enables construction of Spaceship parts\" 计划重构",
-		Replacement: "关注 Unciv 更新日志",
-	},
-}
+// deprecatedRules 已移至 deprecated_gen.go（自动生成，413条）
 
 // CheckDeprecated scans all mod uniques against known deprecated patterns.
 func (a *App) CheckDeprecated() ([]DiagIssue, error) {
@@ -119,10 +77,18 @@ func (a *App) CheckDeprecated() ([]DiagIssue, error) {
 						}
 					}
 					if !found {
+						msg := fmt.Sprintf("%s — 废弃语法", e.Name())
+						detail := rule.Pattern
+						if rule.Description != "" {
+							msg = fmt.Sprintf("%s — %s", e.Name(), rule.Description)
+						}
+						if rule.Replacement != "" {
+							detail = fmt.Sprintf("替代: %s", rule.Replacement)
+						}
 						issues = append(issues, DiagIssue{
 							Mod: mod.Folder, Severity: rule.Severity,
-							Message: fmt.Sprintf("%s — %s", e.Name(), rule.Description),
-							Detail:  fmt.Sprintf("替代: %s", rule.Replacement),
+							Message: msg,
+							Detail:  detail,
 						})
 					}
 				}

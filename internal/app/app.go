@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	UMMVersion = "1.0.0"
+	UMMVersion = "1.3.0"
 	UMMRepo    = "Permanent995/unciv-mod-manager" // TODO: 替换为实际仓库
 )
 type ModInfo struct {
@@ -115,6 +115,7 @@ func NewApp() *App { return &App{} }
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
 	a.initConfig()
+	a.CleanupModBackupMeta()
 }
 
 func (a *App) initConfig() {

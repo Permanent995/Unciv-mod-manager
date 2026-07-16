@@ -101,13 +101,20 @@ func (a *App) RestoreBackup(backupPath string) error {
 		return fmt.Errorf("备份信息不完整")
 	}
 	target := filepath.Join(a.config.UncivPath, "mods", modFolder)
-	// Back up current version if exists
+	// 如果模组已存在，先备份当前版本再删除
 	if _, err := os.Stat(target); err == nil {
 		currentVersion := readModVersion(target)
-		a.BackupMod(modFolder, currentVersion) // best-effort, ignore error
+		if _, backupErr := a.BackupMod(modFolder, currentVersion); backupErr != nil {
+			return fmt.Errorf("备份当前版本失败: %w", backupErr)
+		}
 		os.RemoveAll(target)
 	}
-	return os.Rename(backupPath, target)
+	if err := os.Rename(backupPath, target); err != nil {
+		return fmt.Errorf("恢复备份失败: %w", err)
+	}
+	// 移除备份残留的元数据文件，避免污染模组目录
+	os.Remove(filepath.Join(target, "_backup_info.json"))
+	return nil
 }
 
 // DeleteBackup removes a single backup folder.
@@ -128,4 +135,20 @@ func readModVersion(modPath string) string {
 		return ""
 	}
 	return gjson.Get(string(data), "lastUpdated").String()
+}
+
+// CleanupModBackupMeta scans the mods directory and removes any UMM backup
+// metadata files that may have been left behind by older versions.
+func (a *App) CleanupModBackupMeta() {
+	modsDir := filepath.Join(a.config.UncivPath, "mods")
+	entries, err := os.ReadDir(modsDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		os.Remove(filepath.Join(modsDir, e.Name(), "_backup_info.json"))
+	}
 }

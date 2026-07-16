@@ -18,6 +18,8 @@ export function CheckModUpdates():Promise<Array<app.ModUpdateInfo>>;
 
 export function CheckSelfUpdate():Promise<app.SelfUpdateInfo>;
 
+export function CleanupModBackupMeta():Promise<void>;
+
 export function CleanupTempFile(arg1:string):Promise<void>;
 
 export function CompareModSnapshot(arg1:string):Promise<Array<app.MultiplayerDiff>>;
@@ -51,6 +53,8 @@ export function GetAppConfig():Promise<app.AppConfig>;
 export function GetDownloadList():Promise<Array<app.DownloadTask>>;
 
 export function GetUncivInfo():Promise<Record<string, any>>;
+
+export function GetUncivVersion():Promise<string>;
 
 export function ImportFile(arg1:string):Promise<string>;
 
