@@ -42,9 +42,17 @@ func (a *App) CheckSelfUpdate() (SelfUpdateInfo, error) {
 
 	err := fetchJSON(apiURL, &release)
 	if err != nil {
+		if strings.Contains(err.Error(), "404") {
+			info.LatestVersion = UMMVersion
+			return info, nil
+		}
 		mirrorURL := "https://ghproxy.com/" + apiURL
 		err = fetchJSON(mirrorURL, &release)
 		if err != nil {
+			if strings.Contains(err.Error(), "404") {
+				info.LatestVersion = UMMVersion
+				return info, nil
+			}
 			return info, fmt.Errorf("无法获取最新版本信息（直连和镜像均失败）")
 		}
 	}

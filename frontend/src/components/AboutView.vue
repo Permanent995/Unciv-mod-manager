@@ -90,7 +90,7 @@ function openURL(url: string) {
         <dl class="about-meta-list">
           <div><dt>当前版本</dt><dd>v{{ updateInfo?.currentVersion || '1.0.0' }}</dd></div>
           <div><dt>开源协议</dt><dd>GPL-3.0</dd></div>
-          <div><dt>项目仓库</dt><dd>your/unciv-mod-manager</dd></div>
+          <div><dt>项目仓库</dt><dd>Permanent995/Unciv-mod-manager</dd></div>
           <div><dt>问题反馈</dt><dd>GitHub Issues</dd></div>
         </dl>
       </div>
