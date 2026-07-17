@@ -21,6 +21,7 @@ const menuItems = [
   { id: 'downloads', label: '下载', icon: '⬇️' },
   { id: 'browse', label: '模组发现', icon: '🔍' },
   { id: 'toolbox', label: '工具箱', icon: '🧰' },
+  { id: 'help', label: '帮助', icon: '📖' },
   { id: 'settings', label: '设置', icon: '⚙️' },
   { id: 'about', label: '关于', icon: 'ℹ️' },
 ]

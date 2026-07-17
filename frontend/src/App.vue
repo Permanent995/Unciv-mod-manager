@@ -10,6 +10,7 @@ import BrowseView from './components/BrowseView.vue'
 import MultiplayerView from './components/MultiplayerView.vue'
 import ToolboxView from './components/ToolboxView.vue'
 import SavesView from './components/SavesView.vue'
+import HelpView from './components/HelpView.vue'
 import SettingsView from './components/SettingsView.vue'
 import AboutView from './components/AboutView.vue'
 
@@ -84,6 +85,7 @@ function applyTheme() {
         <DownloadsView v-else-if="currentView === 'downloads'" />
         <BrowseView v-else-if="currentView === 'browse'" />
         <ToolboxView v-else-if="currentView === 'toolbox'" />
+        <HelpView v-else-if="currentView === 'help'" />
         <SettingsView v-else-if="currentView === 'settings'" />
         <AboutView v-else-if="currentView === 'about'" />
       </main>

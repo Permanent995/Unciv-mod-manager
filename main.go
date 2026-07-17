@@ -12,6 +12,14 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+//go:embed README.md
+var readmeContent string
+
+// DocReader serves development documents to the frontend.
+type DocReader struct{}
+
+func (d *DocReader) GetDevDoc() string { return readmeContent }
+
 func main() {
 	// Create an instance of the app structure
 	backend := app.NewApp()
@@ -29,6 +37,7 @@ func main() {
 		OnStartup:        backend.Startup,
 		Bind: []interface{}{
 			backend,
+			&DocReader{},
 		},
 	})
 
