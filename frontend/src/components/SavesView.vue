@@ -32,7 +32,11 @@ async function loadSaves() {
   selected.value = null
   try {
     saves.value = await ScanSaves()
-    if (saves.value.length === 0) msg.value = '未找到存档文件'
+    if (saves.value.length === 0) {
+      msg.value = '未找到存档文件'
+    } else if (!selected.value) {
+      selected.value = saves.value[0]
+    }
   } catch (e: any) {
     msg.value = '读取失败: ' + e
   } finally {
