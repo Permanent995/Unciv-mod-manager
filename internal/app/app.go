@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	UMMVersion = "1.3.0"
+	UMMVersion = "1.4.0"
 	UMMRepo    = "Permanent995/unciv-mod-manager" // TODO: 替换为实际仓库
 )
 type ModInfo struct {
