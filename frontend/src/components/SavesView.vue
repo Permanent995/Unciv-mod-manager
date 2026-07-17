@@ -101,7 +101,9 @@ async function deleteSave(s: SaveInfo) {
     await DeleteSave(s.path)
     msg.value = '已删除: ' + s.name
     saves.value = saves.value.filter(x => x.name !== s.name)
-    if (selected.value?.name === s.name) selected.value = null
+    if (selected.value?.name === s.name) {
+      selected.value = saves.value.length > 0 ? saves.value[0] : null
+    }
   } catch (e: any) {
     msg.value = '删除失败: ' + e
   } finally {
