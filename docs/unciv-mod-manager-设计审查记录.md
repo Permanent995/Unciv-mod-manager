@@ -1,0 +1,454 @@
+# Unciv Mod Manager 方案审查记录
+
+审查日期：2026-07-15
+审查范围：LYT VPK 2.5.4 源码、Unciv 实际模组文件结构、GameSettings.json 实际内容、Wails v2 + Vue 3 技术可行性
+
+---
+
+## 一、方案与实际的差异
+
+### 1. GameSettings.json 结构完全不同（🔴 阻断级）
+
+**方案假设**：`baseRuleset` 和 `mods` 在 JSON 顶层，管理器可以直接读写模组。
+
+**实际情况**：
+```json
+{
+  "tileSet": "5Hex",
+  "unitSet": "5Hex",
+  "lastGameSetup": {
+    "gameParameters": {
+      "baseRuleset": "Go-Astray",
+      "mods": ["5Hex Tileset"]
+    },
+    "mapParameters": {
+      "mods": ["5Hex Tileset", "unciv unrepentant cathay"]
+    }
+  }
+}
+```
+
+- 规则集和扩展模组在深层嵌套对象里，不在顶层
+- 这是"上次开局的配置"，不是"当前全局启用的模组"
+- `gameParameters.mods` 和 `mapParameters.mods` 可以不同
+- 只有 `tileSet`/`unitSet` 是全局实时的图形模组
+- Unciv 没有"全局启禁用"概念，每次开局在游戏内选模组
+
+**修复方案**：管理器改为**只读** GameSettings.json，不写。模组"开关"改为"标记关注"，存管理器自己的 `profiles.json`。玩家去游戏内选模组，管理器只做冲突分析。
+
+### 2. Unciv 的 JSON 不是标准 JSON（🔴 阻断级）
+
+**实际情况**：Go-Astray 的 `ModOptions.json` 有 trailing comma 和 `//` 注释：
+```json
+{
+  "uniques": [ ... ],
+  "isBaseRuleset": true,
+}
+```
+
+**影响**：Go 标准库 `encoding/json` 无法解析。
+
+**修复方案**：使用 `github.com/tidwall/gjson`（容错好，只读）作为解析器。
+
+### 3. replaces 跨模组时仍需报告冲突（🔴 阻断级）
+
+**修正**：同一模组内不同文明对同一实体做 `replaces` 不冲突（如 E&D 内多个文明各自替换 Courthouse）。但**不同模组**即使 `uniqueTo` 不同（如 Hodgepodge 和 unrepentant 都替换 Courthouse），加载顺序也会决定最终哪个生效——这是实打实的互盖问题，需要报告。
+
+**修复方案**：replaces 检测逻辑加入 uniqueTo 维度，跨模组同目标替换仍然报告为互盖。
+
+### 4. 进程锁/TOCTOU 不再需要（🟡 简化）
+
+**原因**：管理器不做写操作，进程检测只用于一键启动时防止重复启动 Unciv。
+
+### 5. 下载方案改为 LYT 的 WriteAt 方案（🟡 优化）
+
+**原方案**：分块→独立 .part 文件→io.Copy 合并（三步）
+**LYT 方案**：`Truncate()` 预分配 → `file.WriteAt()` 直接写偏移量（一步，无合并）
+
+`Truncate()` 是文件系统元数据操作，不占内存。每个 worker 持有一个 5MB buffer，下载完写盘就释放，不存在 OOM。
+
+###  6. "懒作者"模组的兜底处理（🟡 容错）
+
+**问题**：如果模组作者没写开源协议、Readme，甚至 ModOptions.json 信息不全怎么办？
+
+**解决**：
+- `name` 缺失 → 使用文件夹名作为显示名称
+- `author` 缺失 → 显示"未提供"
+- 无 `ModOptions.json` → 标记 `IsIncomplete: true`，分类为 `unclassified`，不报错跳过
+- 检查 `README.md` 是否存在 → 记录到 `HasReadme` 字段，前端可用于提示"该模组无说明文档"
+---
+
+## 二、技术选型决策过程
+
+| 决策项 | 备选 | 最终选择 | 理由 |
+|--------|------|---------|------|
+| 前端框架 | 原生 JS / Vue 3 | **Vue 3** | 组件化，比原生 JS 好维护 |
+| 语言 | JavaScript / TypeScript | **TypeScript** | Wails 自动生成 .d.ts，跨语言类型安全 |
+| UI 库 | 手写 CSS / Naive UI / Element Plus | **Element Plus** | 中文文档全、桌面端验证过、生态大 |
+| 路由 | vue-router / v-if | **v-if 切换** | 6 页面平级无嵌套，桌面端无 URL 栏，无需路由（方案原定 vue-router，实际落地改为 v-if） |
+| 状态管理 | Pinia / 组件 ref | **ref + prop** | 下载状态 Go 后端持有，EventsOn 推送增量更新，组件内 ref 足够（方案原定 Pinia，实际未使用） |
+| 实体数据结构 | ECS 拆分组件 / 扁平 struct | **扁平 struct** | 量级小（几千实体），ECS 拆分徒增复杂度 |
+
+---
+
+## 三、LYT VPK 架构实际发现
+
+| 项目 | 值 |
+|------|-----|
+| Wails 版本 | v2.10.2（go.mod 声明） |
+| Go 模块名 | `vpk-manager` |
+| 内部包数 | 5：`app`、`parser`、`network`、`platform/protocol`、`platform/urlregistry`、`minidump` |
+| 前端框架 | 无，原生 JS + Vite 3，零框架依赖 |
+| 前端文件数 | ~80 JS 文件，~15K-20K 行 |
+| Wails 绑定 | 整个 `*App` struct 绑为 `any`，~120 方法暴露给前端 |
+| 下载方案 | 5MB 分块 + `Truncate()` + `file.WriteAt()` 直接写偏移 |
+| 配置存储 | JSON 文件在 `%AppData%/LytVPK/`，无数据库 |
+| 并发池 | `panjf2000/ants/v2`，size = max(4, GOMAXPROCS) |
+| 存档解析 | `l4d2-manager-next/pkg/valve/vpk`（替换为 `LaoYutang/l4d2-server-next/backend`） |
+| 单例锁 | named pipe 互斥 |
+| URL 协议 | `lytvpk://` 注册到 Windows 注册表 HKCU |
+
+---
+
+## 四、Unciv 模组实际数据
+
+### 已检查的 6 个模组
+
+| 模组 | isBaseRuleset | topics | 类型 |
+|------|-------------|--------|------|
+| 5Hex Tileset | 无 | unciv-mod-graphics | 图形 |
+| Emperors and Deities | true | unciv-mod-rulesets | 规则集 |
+| Go-Astray | true | 无（文件缺失） | 规则集 |
+| Hodgepodge mod | 无 | unciv-mod-expansions, unciv-mod-fun | 扩展 |
+| Leader Mission 2 | true | unciv-mod-rulesets | 规则集 |
+| unciv unrepentant cathay | 无 | unciv-mod-expansions | 扩展 |
+
+**关键发现**：
+- 6 个模组中 **0 个** 有 `modDependencies`
+- `replaces` 字段广泛使用，常与 `uniqueTo` 搭配
+- Go-Astray 用点号命名风格：`Unit.Pioneer`、`Tech.Pipe making`
+- `maps/` 顶级目录只有 `Autosave`（二进制 gzip），没有 .civ5map 文件
+
+### JSON 实体字段（E&D Units.json 样本）
+
+确认存在的字段：`name`、`unitType`、`cost`、`movement`、`strength`、`rangedStrength`、`range`、`requiredTech`、`obsoleteTech`、`upgradesTo`、`requiredResource`、`replaces`、`uniqueTo`、`promotions`、`uniques`、`attackSound`
+
+---
+
+## 五、MergeAction 机制（来自教程文档）
+
+教程路径：`C:\Users\drj13\unciv模组制作\UncivCN扩展JSON-MergeAction教程.md`
+
+五种操作类型：
+1. **无 action / CREATE_OR_REPLACE**：完整覆盖，后加载者完全取代先加载者
+2. **TRY_INJECT**：字段级合并（标量覆盖，数组追加）
+3. **REMOVE**：删除目标实体
+4. **REMOVE_FIELD**：移除指定字段
+5. **条件分支**：`if` + `then`/`else` 控制块
+
+对冲突检测的影响：
+- 两个 TRY_INJECT 同一建筑的数组字段 → 🟢 安全（游戏自动追加）
+- 两个 TRY_INJECT 同一建筑的标量字段 → 🟡 值被覆盖
+- TRY_INJECT + 完整覆盖同一实体 → 🔴 完整覆盖吞掉 TRY_INJECT
+- REMOVE + TRY_INJECT 同一实体 → ⚠️ 加载顺序决定 TRY_INJECT 是否失效
+
+---
+
+## 六、执行阶段调整记录
+
+| 原始方案 | 调整后 | 原因 |
+|---------|--------|------|
+| Phase 1: 项目初始化 | Phase 1: 项目初始化 + 路径检测 | 路径检测是扫描模组的前提，不能放在 Day 5 |
+| Phase 3: 路径检测 + 启动 | 合并为新的 Phase 3（启动 + 关于页） | 路径已提前到 Phase 1 |
+| Phase 7: 集成测试 + 打包 | 合并为 Phase 6 | 减少阶段数，更均衡 |
+
+---
+
+## 七、核心原则：规则集互斥
+
+**两个规则集永远不可能同时启用。**
+
+- E&D 和 Go-Astray 是互斥的，玩家一次只能选一个
+- 规则集之间的实体比较（同名/覆盖/替换）**毫无意义**
+- 冲突检测引擎在任何阶段都不得比较两个规则集
+
+### 对冲突检测的实际影响
+
+1. **globalIndex 只放扩展**。规则集实体只缓存，用于类型存在性检查。
+2. **类型存在性检查**：扩展引用的 `unitType`/`requiredTech`/`requiredResource`，检查是否存在于**全部已加载模组（规则集+扩展）的集合**中。不存在的才是风险。
+3. **原版 unitType 白名单**：`Sword`/`Archery`/`Mounted` 等是 Civ5 游戏引擎硬编码类型，不在任何 JSON 文件中。必须单独维护白名单。科技和资源应按规则集 JSON 解析——parser 出问题则另修。
+4. **不做按规则集拆分的兼容性报告**。扩展和规则集的匹配是玩家自己决定的事。
+
+---
+
+## 八、技术选型实际落地 vs 方案差异
+
+| 决策项 | 方案原定 | 实际落地 | 原因 |
+|--------|---------|---------|------|
+| 路由 | vue-router | **v-if 切换** | 6 个页面平级无嵌套、桌面端无 URL 栏、下载进度靠 EventsOn 推送不需路由参数 |
+| 状态管理 | Pinia | **组件内 ref + prop** | 下载状态由 Go 后端持有，前端 GetDownloadList 拉取 + EventsOn 增量更新，不需要全局 store |
+
+## 九、Phase 4 实施中遇到的技术问题
+
+### 1. Go 版本号不一致（🟡 环境问题）
+
+**现象**：`go.mod` 声明 `go 1.25.0`，但实际安装 Go 1.24.4。`GOTOOLCHAIN=local` 时直接拒绝编译。
+
+**原因**：Wails v2.13.0 自动升级了 go.mod 的 Go 版本指令。
+
+**解决**：不加 `GOTOOLCHAIN=local`，Go 自动下载 1.25 工具链后编译通过。
+
+### 2. Windows Defender 误报 Go exe 为病毒（🔴 阻断级）
+
+**现象**：每次 `wails build` 产出的 `.exe` 被 Windows Defender 隔离。
+
+**原因**：Go runtime 内存分配模式触发启发式扫描。
+
+**解决**：Windows 安全中心 → 排除项，添加 `build/bin` 目录。
+
+### 3. 镜像测速打根路径全部超时（🔴 功能缺陷）
+
+**现象**：测速后只显示"直连"，所有镜像站不可用。下载走直连几十 KB/s。
+
+**原因**：`TestMirrorsLatency()` 对镜像发 `HEAD https://ghproxy.com/`（根路径），大部分镜像不响应根路径 HEAD，全部超时被丢弃。
+
+**修复**：改用 GET 真实探测文件（Unciv README）通过镜像，即 `GET https://ghproxy.com/https://raw.githubusercontent.com/...`。只有 200 才计入。新增 ghfast.top、kkgithub.com、hub.nuaa.cf 三个镜像，共 6 个。
+
+### 4. 非直链 URL 下载 HTML 当 ZIP 解包失败（🔴 功能缺陷）
+
+**现象**：用户粘贴 GitHub Releases 页面 URL，下载"成功"但解包报 `zip: not a valid zip file`。
+
+**原因**：对非直链 GET 下载，服务器返回 HTML 网页。下载器未检查 Content-Type，直接写入 `.zip`。
+
+**修复**：
+- HEAD 阶段检查 `Content-Type`，含 `text/html` 则提示"请使用直链"
+- HTTP 状态码检查（非 200 报错）
+- 新增 `FetchReleases` API + 版本选择 UI，自动构建 `archive/...zip` 直链
+
+### 5. 无边框窗口 CSS 拖拽（🟡 Wails 特定）
+
+**现象**：`Frameless: true` 后窗口无法拖动。
+
+**修复**：标题栏 `--wails-draggable: drag`，按钮区 `no-drag`。窗口控制调 `WindowMinimise()`/`WindowToggleMaximise()`/`Quit()`。
+
+### 6. OnFileDrop 参数缺失（🟡 TS 类型）
+
+**现象**：`vue-tsc` 报 `Expected 2 arguments, but got 1`。
+
+**原因**：Wails runtime `OnFileDrop(callback, useDropTarget)` 需要第二个 boolean 参数。
+
+**修复**：加第二个参数 `true`。
+
+### 7. 懒作者模组信息残缺（🟡 容错）
+
+**现象**：部分模组 `ModOptions.json` 缺少 name/author 或根本不存在。
+
+**修复**：
+- name 空 → 用文件夹名
+- author 空 → "未提供"
+- 无 ModOptions.json → `IsIncomplete: true`，不崩溃不跳过
+- 检查 README.md 存在性 → `HasReadme`
+
+### 8. AppConfig 字段追加导致前端类型不匹配（🟡 联动问题）
+
+**现象**：Go 端 `AppConfig` 加 `Theme`/`SidebarWidth` 字段后，`SettingsView.vue` 初始化字面量报 TS2345。
+
+**原因**：Wails 自动更新 `models.ts` 类型定义，但 Vue 组件硬编码的初始值未同步。
+
+**修复**：每次 Go struct 加字段，检查所有前端初始化字面量，补齐默认值。
+
+### 9. GitHub API zipball_url 403（🔴 阻断级）
+
+**现象**：通过 GitHub API 获取 Release 列表后，用返回的 `zipball_url`（`api.github.com/repos/.../zipball/v1.0.0`）下载返回 403。
+
+**原因**：GitHub API 的 zipball 端点需要认证 token 或正确处理重定向到 `codeload.github.com`。国内网络环境下重定向链容易断开。
+
+**修复**：放弃 API zipball，改为拼接 CDN 直链 `https://github.com/user/repo/archive/refs/tags/vX.Y.Z.zip`，无需认证，走镜像代理畅通。
+
+### 10. 模组大小字段经常为空（🟡 数据不完整）
+
+**现象**：按大小排序没有实际效果，因为 `ModOptions.json` 里 `modSize` 字段大部分模组不填。
+
+**修复**：后端扫描时调用 `dirSize()` 遍历文件夹计算实际占用字节数，`modSize` 为 0 时自动回退到实际大小。
+
+### 11. README 背景色主题适配（🟡 UI 细节）
+
+**现象**：亮暗主题下 README 和代码块的 `--bg-card` 变量在亮色模式下太淡（接近白色），可读性差。
+
+**修复**：README 展示区和崩溃堆栈改用固定深色背景 `#1a1a24` + 浅灰文字 `#d4d4d4`，两主题下统一可读。
+
+### 12. 下载任务 map 永不清理（🔴 内存泄漏）
+
+**现象**：`dlTasks` map 中已完成/失败的任务永不删除，长时间运行后累计内存占用。
+
+**修复**：`StartDownload` 入口加 `pruneOldTasks()`，累计超过 50 条任务时清除已完成/失败任务，释放 `speedSamples` 切片和文件引用。
+
+### 13. 下载临时 ZIP 残留（🟡 磁盘浪费）
+
+**现象**：`%TEMP%/unciv-mm-downloads/` 中的 ZIP 文件解包后不删除，持续占用磁盘。
+
+**修复**：新增 `CleanupTempFile()` 方法，前端解包成功后调用删除临时 ZIP。
+
+### 14. Google 翻译国内不可用（🟡 功能取舍 → ✅ 已解决）
+
+**最终方案**：不依赖 Google。照搬 LYT 的微软/Yandex 免费方案（借 Android App 公钥签名），另加自定义 OpenAI 兼容 API（DeepSeek 等）。设置页可切换三种翻译提供者。
+
+### 15. 微软翻译 429 限流（🟡 运行时）
+
+**现象**：微软翻译免费额度 200 万字符/月，频繁使用触发 429。
+
+**对策**：Yandex 1000 万字符/月更宽松，建议设置页切换。自定义 DeepSeek API ¥1/百万 token 不限量。
+
+### 16. 地图扫描只认 .civ5map 后缀（🔴 功能缺陷）
+
+**现象**：Unciv 地图文件常不带后缀（如 `欧罗巴洲`），`ScanMaps` 只匹配 `.civ5map` 导致扫不到。
+
+**修复**：`maps/` 和 `mods/*/maps/` 下所有非目录文件都纳入扫描，排除 `backup` 目录。
+
+### 17. GitHub 作者提取（🟡 数据补全）
+
+**现象**：大量模组的 `ModOptions.json` 不填 `author` 字段，列表显示"未提供"。
+
+**修复**：`parseModInfo` 中若 author 为空且 `modUrl` 含 `github.com/`，自动提取 owner 作为作者回退。
+
+### 18. Wesnoth .map 格式支持（✅ 已实现）
+
+原本判断"工程量巨大不做"，实际只需 40 个地形码映射表，~70 行代码。拖入 .map 文件自动转换+原文件备份。
+
+### 19. 在线浏览独立（✅ 功能拆分）
+
+从下载页 Tab 拆出为独立侧边栏导航项（🔍 在线浏览），位于下载和工具箱之间。侧边栏默认宽度 200→220px。
+
+### 20. 图标替换（🟡 体验）
+
+Wails 默认图标为字母 W，替换为 CK3 征服者图片。Windows 图标缓存顽固——需多分辨率 .ico + 清除缓存 + 新文件名才能刷新。
+
+---
+
+## 十一、执行阶段最终调整
+
+| 阶段 | 原始预估 | 实际结果 |
+|------|---------|---------|
+| Phase 1 项目初始化 + 路径检测 | Day 1 | ✅ |
+| Phase 2 模组扫描与管理 | Day 2-3 | ✅ |
+| Phase 3 启动 Unciv + 设置 | Day 4 | ✅ |
+| Phase 4 下载 + 解包 + 地图导入 | Day 5-7 | ✅ |
+| Phase 5 冲突检测 | Day 8-10 | ✅ |
+| Phase 6 崩溃报告 + 打包 | Day 11-14 | ✅ |
+| 无边框窗口 + 主题 | 未预计 | ✅ |
+| 在线浏览 + 翻译 + Wesnoth | 未预计 | ✅ |
+| 图标 + 字体 + 队列优化 | 未预计 | ✅ |
+| **总计** | **14 天** | **已完成** |
+
+---
+
+## Session 2 (2026-07-16) 新增审查记录
+
+### 21. Unciv 自带 JRE 类加载异常（🔴 外部依赖问题）
+
+**现象**：
+- 点击"定位模组错误"时 `NoClassDefFoundError: kotlin.jvm.internal.Intrinsics`
+- 启动时偶发 `NoClassDefFoundError: UniqueType$UniqueParameterErrorSeverity`
+- 两个类在 `Unciv.jar` 内均存在（`unzip -t` 验证通过），且 jar 完整性校验 OK
+- 使用系统 Java（同样 Temurin-21.0.11）运行完全正常
+
+**排查过程**：
+1. 确认 `Unciv.jar` 中 `UniqueType$UniqueParameterErrorSeverity.class` 存在 ✅
+2. 确认 `Unciv.jar` 中 `kotlin/jvm/internal/Intrinsics.class` 存在 ✅
+3. 确认 `jre/bin/java --version` = Temurin-21.0.11+10，与系统 Java 版本一致
+4. 确认 `jre/lib/modules` 99MB，模块数 50（完整 JDK，非 jlink 裁剪版）
+5. 确认 `Unciv.json` classPath 仅为 `["Unciv.jar"]`，无外部干扰
+6. 系统 Java 运行 `java -jar Unciv.jar` 无任何问题
+
+**结论**：自带 `jre/` 的模块系统元数据损坏或存在特定环境下的类加载器 bug，**与 UMM 无关**。
+
+**建议**：修改 `Unciv.json` 将 `jrePath` 置空以使用系统 Java，或重新下载 Unciv 获取新的 `jre/`。
+
+### 22. 存档模组列表读取限制（🔴 功能缺陷 → ✅ 已修复）
+
+**现象**：存档详情页显示"无扩展模组"，但 Unciv 游戏内可见模组列表。
+
+**原因**：`gameParameters.mods` 位于存档文件尾部（434KB 文件的 433939 字节处），而代码只读取前 96KB（98304 字节），截断导致 gjson 找不到该字段。
+
+**修复**：读取限制从 96KB 提升至 2MB（2097152），覆盖所有已知存档大小。
+
+### 23. 存档模组字段搜索路径（🟡 容错增强）
+
+**现象**：部分存档的 mods 不在 `gameParameters.mods` 而在 `lastGameSetup.gameParameters.mods`。
+
+**修复**：三层兜底搜索：`mods` → `gameParameters.mods` → `lastGameSetup.gameParameters.mods`。
+
+### 24. 侧边栏游戏版本显示（✅ 新增功能）
+
+**新增**：`GetUncivVersion()` 方法从 `Unciv.jar` 的 `META-INF/MANIFEST.MF` 读取 `Specification-Version` 字段，降级从 `GameSettings.json` 的 `createdWithVersion` 字段读取。侧边栏底部显示 `🕹️ Unciv x.x.x`。
+
+### 25. LYT 配色完整适配（✅ UI 改进）
+
+**改动**：
+- `:root` 定义基础文字色：`--text-primary: #1e293b`, `--text-secondary: #475569`, `--text-muted: #94a3b8`
+- `[data-theme="light"]` 仅设置背景白，文字继承 :root
+- `[data-theme="dark"]` 仅覆盖背景和边框，文字不变
+- 兼容别名层将 LYT 变量名映射到 UMM 现有组件变量（`--bg-primary` → `--bg-app` 等）
+- `--accent` 在别名中覆盖为 `#4f46e5`（LYT 的 indigo primary），因为 UMM 用 `--accent` 作为按钮/主色调
+
+### 26. 关于页面重做（✅ UI 改进）
+
+**改动**：仿 LYT VPK 风格：
+- Hero 区（logo + kicker + 标题 + 描述）
+- 双列网格（项目信息 + 操作按钮）
+- 底部功能特性卡片
+- GitHub 链接统一更新为 `Permanent995/unciv-mod-manager`
+
+### 27. 检查更新 404 处理（✅ 功能修复）
+
+**现象**：GitHub 仓库无 Release 时，`/releases/latest` 返回 404，UMM 显示"检查失败"。
+
+**修复**：`selfupdate.go` 中在 `fetchJSON` 返回 404 时，返回"当前已是最新版本"而非错误。
+
+### 28. 测试文件补充（✅ 质量提升）
+
+新增 `app_test.go`，17 个测试覆盖：
+- 语义化版本解析与比较
+- 原生类型判断
+- 文件分类
+- 冲突检测（4 个子测试：TRY_INJECT 值差异/相同/CREATE_OR_REPLACE/无 mergeAction）
+- 字符串截断
+- 废弃规则检测
+- 镜像列表完整性
+- 速度格式化
+- 任务 ID 生成
+- owner/repo URL 解析
+- JSON 预处理
+- 存档元数据解析（空文件容错）
+- Wesnoth 地形映射
+- URL 编码
+- 镜像 URL 转换
+
+### 29. 模组诊断过早显示"通过"（✅ 功能修复）
+
+**现象**：进入工具箱→模组诊断时，`diagIssues` 初始为空数组，两个 `v-if` 同时为 true，导致在诊断运行前就显示"✅ 所有模组通过自检"。
+
+**修复**：增加 `diagDone` ref，仅在诊断完成后显示通过消息。
+
+### 30. 下载队列安装按钮时机（✅ 功能修复）
+
+**现象**：点击下载后立即显示"安装更新"按钮，但下载尚未完成。
+
+**修复**：移除自动显示安装按钮，改为下载成功时显示手动安装指引。
+
+### 31. 工具箱拖拽手柄（✅ 交互改进）
+
+**现象**：长模组名称被截断，无法查看完整名称。
+
+**修复**：在分类侧栏和条目面板之间添加 `.drag-handle`，支持鼠标拖拽调整宽度。
+
+---
+
+## 十二、参考文档
+
+- LYT VPK 源码：`c:\Users\drj13\Desktop\ak\lytvpk-2.5.4\`
+- Unciv 模组目录：`c:\Users\drj13\Desktop\官方unciv文件\mods\`
+- GameSettings.json：`c:\Users\drj13\Desktop\官方unciv文件\GameSettings.json`
+- ModListCache.json：`c:\Users\drj13\Desktop\官方unciv文件\ModListCache.json`
+- MergeAction 教程：`C:\Users\drj13\unciv模组制作\UncivCN扩展JSON-MergeAction教程.md`
+- Wails v2 官方文档：https://wails.io/docs/

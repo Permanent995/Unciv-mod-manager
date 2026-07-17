@@ -435,3 +435,26 @@ export namespace app {
 
 }
 
+export namespace main {
+	
+	export class DocInfo {
+	    name: string;
+	    title: string;
+	    size: number;
+	    modTime: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DocInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.title = source["title"];
+	        this.size = source["size"];
+	        this.modTime = source["modTime"];
+	    }
+	}
+
+}
+

@@ -6,3 +6,6 @@ frontend/dist/
 *.log
 .DS_Store
 thumbs.db
+
+# Dev docs source (local copy, repo copy is in docs/)
+Desktop/log/
