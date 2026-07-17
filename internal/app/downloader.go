@@ -375,6 +375,8 @@ func (a *App) GetDownloadList() []DownloadTask {
 // ── Internal download runner ──────────────────────────────────────────
 
 func (a *App) runDownload(t *dlTask) {
+	defer RecoverLog("download")
+
 	// 1. HEAD to get total size + range support
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Head(t.URL)
@@ -430,6 +432,7 @@ func (a *App) runDownload(t *dlTask) {
 	t.mu.Lock()
 	finished := t.Status == "downloading" // not cancelled/failed mid-way
 	if finished {
+		LogInfo("下载", "完成: id=%s filename=%s", t.ID, t.Filename)
 		t.Status = "completed"
 		t.Percent = 100
 	}
@@ -440,6 +443,7 @@ func (a *App) runDownload(t *dlTask) {
 	t.mu.Unlock()
 
 	if finished {
+		LogInfo("下载", "完成: id=%s filename=%s", t.ID, t.Filename)
 		runtime.EventsEmit(a.ctx, "download:complete", map[string]interface{}{
 			"id":       t.ID,
 			"filename": t.Filename,
@@ -600,6 +604,7 @@ func (a *App) singleThreadDownload(t *dlTask) {
 // ── Helpers ───────────────────────────────────────────────────────────
 
 func (a *App) failTask(t *dlTask, msg string) {
+	LogWarn("下载", "失败: id=%s url=%s error=%s", t.ID, t.URL, msg)
 	t.mu.Lock()
 	t.Status = "failed"
 	t.Error = msg

@@ -3,10 +3,14 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 const (
@@ -115,7 +119,17 @@ func NewApp() *App { return &App{} }
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
 	a.initConfig()
+	a.initLogger()
 	a.CleanupModBackupMeta()
+}
+
+func (a *App) initLogger() {
+	logDir := filepath.Join(a.configDir, "logs")
+	InitLogger(LogConfig{
+		LogDir:     logDir,
+		MaxSize:    10 * 1024 * 1024, // 10 MB
+		MaxBackups: 3,
+	})
 }
 
 func (a *App) initConfig() {
@@ -171,6 +185,57 @@ func (a *App) SetUncivPath(path string) error {
 }
 
 func (a *App) GetUMMVersion() string { return UMMVersion }
+
+// ExportLogFile opens a Save dialog and copies the newest log file to the chosen location.
+func (a *App) ExportLogFile() (string, error) {
+	logDir := filepath.Join(a.configDir, "logs")
+	entries, err := os.ReadDir(logDir)
+	if err != nil {
+		return "", fmt.Errorf("没有日志文件")
+	}
+	// Find newest .log file
+	var newest string
+	var newestMod time.Time
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".log") {
+			fi, _ := e.Info()
+			if fi == nil {
+				continue
+			}
+			if fi.ModTime().After(newestMod) {
+				newest = filepath.Join(logDir, e.Name())
+				newestMod = fi.ModTime()
+			}
+		}
+	}
+	if newest == "" {
+		return "", fmt.Errorf("没有日志文件")
+	}
+
+	dest, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		Title:           "导出日志文件",
+		DefaultFilename: "umm-log-" + time.Now().Format("2006-01-02") + ".txt",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "文本文件 (*.txt)", Pattern: "*.txt"},
+			{DisplayName: "所有文件 (*.*)", Pattern: "*.*"},
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("保存对话框出错: %w", err)
+	}
+	if dest == "" {
+		return "", nil // user cancelled
+	}
+
+	data, err := os.ReadFile(newest)
+	if err != nil {
+		return "", fmt.Errorf("读取日志文件失败: %w", err)
+	}
+	if err := os.WriteFile(dest, data, 0644); err != nil {
+		return "", fmt.Errorf("写入日志文件失败: %w", err)
+	}
+	return dest, nil
+}
 
 func (a *App) SetZoomLevel(level int) int {
 	if level < 80 {

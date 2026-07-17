@@ -90,6 +90,10 @@ export function DownloadSelfUpdate(arg1) {
   return window['go']['app']['App']['DownloadSelfUpdate'](arg1);
 }
 
+export function ExportLogFile() {
+  return window['go']['app']['App']['ExportLogFile']();
+}
+
 export function ExportModSnapshot() {
   return window['go']['app']['App']['ExportModSnapshot']();
 }
@@ -112,6 +116,10 @@ export function GetAppConfig() {
 
 export function GetDownloadList() {
   return window['go']['app']['App']['GetDownloadList']();
+}
+
+export function GetLogFiles() {
+  return window['go']['app']['App']['GetLogFiles']();
 }
 
 export function GetUMMVersion() {
@@ -164,6 +172,10 @@ export function ReadCrashReport() {
 
 export function ReadLocalModCache() {
   return window['go']['app']['App']['ReadLocalModCache']();
+}
+
+export function ReadLogFile(arg1) {
+  return window['go']['app']['App']['ReadLogFile'](arg1);
 }
 
 export function ReadModPreview(arg1) {

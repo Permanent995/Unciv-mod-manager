@@ -46,6 +46,8 @@ export function DownloadModUpdate(arg1:string):Promise<string>;
 
 export function DownloadSelfUpdate(arg1:string):Promise<string>;
 
+export function ExportLogFile():Promise<string>;
+
 export function ExportModSnapshot():Promise<string>;
 
 export function ExtractMod(arg1:string,arg2:string):Promise<string>;
@@ -57,6 +59,8 @@ export function FetchReleases(arg1:string):Promise<Array<app.GHRelease>>;
 export function GetAppConfig():Promise<app.AppConfig>;
 
 export function GetDownloadList():Promise<Array<app.DownloadTask>>;
+
+export function GetLogFiles():Promise<Array<string>>;
 
 export function GetUMMVersion():Promise<string>;
 
@@ -83,6 +87,8 @@ export function PauseDownload(arg1:string):Promise<void>;
 export function ReadCrashReport():Promise<app.CrashInfo>;
 
 export function ReadLocalModCache():Promise<Array<app.OnlineMod>>;
+
+export function ReadLogFile(arg1:string):Promise<string>;
 
 export function ReadModPreview(arg1:string):Promise<string>;
 

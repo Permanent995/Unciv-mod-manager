@@ -81,6 +81,7 @@ func (a *App) fetchReleasesFrom(apiURL string) ([]GHRelease, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
+		LogWarn("API", "GitHub限流: url=%s code=%d", apiURL, resp.StatusCode)
 		return nil, fmt.Errorf("GitHub API 限流，请填入 Token 或稍后再试")
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -294,6 +295,7 @@ func (a *App) ghRequestInto(apiURL string) (*ghSearchResult, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
+		LogWarn("API", "GitHub限流: url=%s code=%d", apiURL, resp.StatusCode)
 		return nil, fmt.Errorf("GitHub API 限流，请在设置中填入 Token 或稍后再试")
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -334,6 +336,7 @@ func (a *App) FetchReadme(owner, repo string) (string, error) {
 	client := &http.Client{Timeout: 8 * time.Second}
 	for _, u := range urls {
 		go func(url string) {
+				defer RecoverLog("fetch-readme")
 			resp, err := client.Get(url)
 			if err != nil {
 				ch <- attempt{url: url, err: err}

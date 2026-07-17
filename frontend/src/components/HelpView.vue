@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ListDocs, ReadDoc } from '../../wailsjs/go/main/DocReader'
+import { ExportLogFile } from '../../wailsjs/go/app/App'
 
 interface DocInfo {
   name: string
@@ -15,6 +16,12 @@ const loading = ref(false)
 const loadingList = ref(false)
 const activeDoc = ref('')
 const errMsg = ref('')
+
+// Log export state
+const showExportDialog = ref(false)
+const exporting = ref(false)
+const exportMsg = ref('')
+const exportOk = ref(false)
 
 onMounted(loadDocs)
 
@@ -46,6 +53,35 @@ async function selectDoc(doc: DocInfo) {
     loading.value = false
   }
 }
+
+function showExport() {
+  exportMsg.value = ''
+  exportOk.value = false
+  showExportDialog.value = true
+}
+
+function cancelExport() {
+  showExportDialog.value = false
+}
+
+async function doExport() {
+  showExportDialog.value = false
+  exporting.value = true
+  exportMsg.value = ''
+  exportOk.value = false
+  try {
+    const path = await ExportLogFile()
+    if (path) {
+      exportMsg.value = '日志已导出到: ' + path
+      exportOk.value = true
+    }
+  } catch (e: any) {
+    exportMsg.value = '导出失败: ' + e
+    exportOk.value = false
+  } finally {
+    exporting.value = false
+  }
+}
 </script>
 
 <template>
@@ -74,6 +110,14 @@ async function selectDoc(doc: DocInfo) {
         <div v-if="!loadingList && docs.length === 0" class="no-docs">
           未找到开发文档
         </div>
+
+        <div class="sidebar-divider"></div>
+
+        <div class="help-sidebar-title">导出日志</div>
+        <button class="export-btn" :disabled="exporting" @click="showExport">
+          {{ exporting ? '导出中...' : '💾 导出为 TXT' }}
+        </button>
+        <div v-if="exportMsg" class="export-status" :class="{ ok: exportOk }">{{ exportMsg }}</div>
       </div>
 
       <div class="help-content">
@@ -83,6 +127,20 @@ async function selectDoc(doc: DocInfo) {
         <div v-else class="empty-hint">请从左侧选择一篇文档</div>
       </div>
     </div>
+
+    <!-- Export confirmation dialog -->
+    <Teleport to="body">
+      <div v-if="showExportDialog" class="modal-overlay" @click.self="cancelExport">
+        <div class="modal-dialog">
+          <div class="modal-header">导出日志</div>
+          <p class="modal-body">很抱歉，您的游戏出现了一些问题。如果要寻求帮助，请将错误报告发给他人，而不是发送报错窗口的截图。</p>
+          <div class="modal-buttons">
+            <button class="modal-btn" @click="cancelExport">取消</button>
+            <button class="modal-btn primary" @click="doExport">导出日志</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -114,6 +172,20 @@ async function selectDoc(doc: DocInfo) {
 .doc-title { font-size: 13px; font-weight: 600; line-height: 1.3; }
 .doc-meta { font-size: 11px; color: var(--text-muted); }
 
+.sidebar-divider { height: 1px; background: var(--border-color); margin: 10px 14px; }
+
+.export-btn {
+  margin: 0 14px; padding: 8px 12px;
+  background: var(--accent); color: #fff;
+  border: none; border-radius: 6px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  text-align: center; transition: opacity 0.15s;
+}
+.export-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.export-btn:hover:not(:disabled) { opacity: 0.9; }
+.export-status { font-size: 11px; padding: 4px 14px; color: var(--danger); word-break: break-all; }
+.export-status.ok { color: var(--success); }
+
 .help-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
 .loading { padding: 20px; color: var(--text-muted); }
 .error { padding: 20px; color: var(--danger); }
@@ -127,4 +199,50 @@ async function selectDoc(doc: DocInfo) {
   background: var(--bg-card); border-radius: 8px; padding: 20px;
   color: var(--text-primary); border: 1px solid var(--border-color);
 }
+</style>
+
+<style>
+/* Unscoped: modal over body */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9999;
+}
+.modal-dialog {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 24px;
+  min-width: 360px;
+  max-width: 460px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+}
+.modal-header {
+  font-size: 16px; font-weight: 700;
+  margin-bottom: 12px;
+  color: var(--text-primary);
+}
+.modal-body {
+  font-size: 14px; line-height: 1.6;
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+}
+.modal-buttons {
+  display: flex; justify-content: flex-end; gap: 8px;
+}
+.modal-btn {
+  padding: 8px 18px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 14px; font-weight: 600;
+  cursor: pointer;
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+.modal-btn:hover { border-color: var(--accent); }
+.modal-btn.primary {
+  background: var(--accent); color: #fff; border-color: var(--accent);
+}
+.modal-btn.primary:hover { opacity: 0.9; }
 </style>
