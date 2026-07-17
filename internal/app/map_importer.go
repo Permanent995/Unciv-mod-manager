@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/tidwall/gjson"
 )
 
 // MapInfo holds metadata about a discovered map file.
@@ -18,16 +20,99 @@ type MapInfo struct {
 	ModFolder  string `json:"modFolder,omitempty"`
 }
 
-// SaveClipboardAsMap writes clipboard text content as a timestamped .civ5map file.
-func (a *App) SaveClipboardAsMap(text string) error {
+// SaveClipboardMap writes clipboard text as a .civ5map file with the given name.
+// nameHint is the user's desired name (without extension); if empty, falls back
+// to the map's internal name or "clipboard_<timestamp>".
+// If the file already exists, auto-appends a counter.
+func (a *App) SaveClipboardMap(text string, nameHint string) (string, error) {
 	uncivPath := a.config.UncivPath
 	if uncivPath == "" {
-		return fmt.Errorf("未设置 Unciv 路径")
+		return "", fmt.Errorf("未设置 Unciv 路径")
 	}
+	if len(text) < 10 {
+		return "", fmt.Errorf("剪贴板内容太短，不是有效的地图")
+	}
+
+	trimmed := strings.TrimSpace(text)
+	if !strings.HasPrefix(trimmed, "H4sI") && !strings.HasPrefix(trimmed, "{") {
+		return "", fmt.Errorf("剪贴板内容不是有效的地图格式——.civ5map 应为压缩数据或 JSON 对象")
+	}
+
+	if strings.HasPrefix(trimmed, "{") {
+		if !gjson.Valid(trimmed) {
+			return "", fmt.Errorf("剪贴板内容不是有效的 JSON 地图")
+		}
+		if !gjson.Get(trimmed, "tiles").Exists() && !gjson.Get(trimmed, "width").Exists() {
+			return "", fmt.Errorf("剪贴板内容缺少地图数据字段（tiles 或 width）")
+		}
+	}
+
+	// Determine filename
+	name := nameHint
+	if name == "" {
+		if strings.HasPrefix(trimmed, "{") {
+			if n := gjson.Get(trimmed, "name").String(); n != "" {
+				name = n
+			}
+		}
+	}
+	if name == "" {
+		name = fmt.Sprintf("clipboard_%s", time.Now().Format("2006-01-02_150405"))
+	}
+
 	mapsDir := filepath.Join(uncivPath, "maps")
 	os.MkdirAll(mapsDir, 0755)
-	filename := fmt.Sprintf("clipboard_%d.civ5map", time.Now().Unix())
-	return os.WriteFile(filepath.Join(mapsDir, filename), []byte(text), 0644)
+
+	// Dedup: if file exists, append (2), (3), etc.
+	filename := name + ".civ5map"
+	if _, err := os.Stat(filepath.Join(mapsDir, filename)); err == nil {
+		for i := 2; ; i++ {
+			filename = fmt.Sprintf("%s (%d).civ5map", name, i)
+			if _, err := os.Stat(filepath.Join(mapsDir, filename)); os.IsNotExist(err) {
+				break
+			}
+		}
+	}
+
+	return filename, os.WriteFile(filepath.Join(mapsDir, filename), []byte(text), 0644)
+}
+
+// DeleteMap removes a .civ5map file from maps/ (not from mods/*/maps/).
+func (a *App) DeleteMap(path string) error {
+	if path == "" {
+		return fmt.Errorf("路径为空")
+	}
+	mapsDir := filepath.Join(a.config.UncivPath, "maps")
+	absDir, _ := filepath.Abs(mapsDir)
+	absPath, _ := filepath.Abs(path)
+	if !strings.HasPrefix(absPath, absDir+string(filepath.Separator)) && absPath != absDir {
+		return fmt.Errorf("只能删除 maps/ 目录下的文件")
+	}
+	return os.Remove(absPath)
+}
+
+// RenameMap renames a .civ5map file in maps/. newName is without extension.
+// Returns the new filename (with dedup counter if needed).
+func (a *App) RenameMap(oldPath string, newName string) (string, error) {
+	if oldPath == "" || newName == "" {
+		return "", fmt.Errorf("参数为空")
+	}
+	// Safety: only allow renaming files inside maps/
+	mapsDir := filepath.Join(a.config.UncivPath, "maps")
+	absDir, _ := filepath.Abs(mapsDir)
+	absPath, _ := filepath.Abs(oldPath)
+	if !strings.HasPrefix(absPath, absDir+string(filepath.Separator)) {
+		return "", fmt.Errorf("只能重命名 maps/ 目录下的文件")
+	}
+
+	newPath := filepath.Join(absDir, newName+".civ5map")
+	if _, err := os.Stat(newPath); err == nil {
+		return "", fmt.Errorf("文件名 %q 已存在", newName+".civ5map")
+	}
+	if err := os.Rename(absPath, newPath); err != nil {
+		return "", fmt.Errorf("重命名失败: %w", err)
+	}
+	return newName + ".civ5map", nil
 }
 
 // ScanMaps finds all .civ5map files in maps/ and mods/*/maps/.
@@ -102,7 +187,6 @@ func (a *App) ImportFile(sourcePath string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		// Also back up the original
 		a.backupUnknownFile(sourcePath, uncivPath, name)
 		return fmt.Sprintf("Wesnoth 地图已转换为 %s，原文件已备份", filepath.Base(outPath)), nil
 
@@ -125,7 +209,6 @@ func (a *App) importMapFile(sourcePath, uncivPath, name string) (string, error) 
 }
 
 func (a *App) importZipFile(sourcePath, uncivPath string) (string, error) {
-	// Peek inside to decide: mod or map bundle?
 	r, err := zipOpen(sourcePath)
 	if err != nil {
 		return "", fmt.Errorf("无法打开 ZIP: %w", err)
@@ -201,7 +284,6 @@ func copyFile(src, dst string) error {
 	return err
 }
 
-// zipOpen is a thin wrapper so importZipFile can read the file list twice.
 func zipOpen(path string) (*zipReadCloser, error) {
 	return zip.OpenReader(path)
 }

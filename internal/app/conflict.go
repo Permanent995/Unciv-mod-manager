@@ -182,7 +182,37 @@ func (a *App) AnalyzeConflicts() ([]ConflictReport, error) {
 		}
 	}
 
-	// ══ Phase D: Incompatible declarations ═══════════════════════
+	// ══ Phase D: Cross-mod entity references ═════════════════════
+	// For each extension, check replaces/upgradesTo targets exist
+	// in any loaded mod (rulesets + extensions + vanilla).
+	{
+		allEntityNames := map[string]bool{}
+		for _, mod := range append(rulesets, extensions...) {
+			for _, e := range load(mod) {
+				allEntityNames[e.Name] = true
+			}
+		}
+		for _, ext := range extensions {
+			for _, e := range load(ext) {
+				for _, ref := range []struct{ field, val string }{
+					{"replaces", e.Replaces},
+					{"upgradesTo", e.UpgradesTo},
+				} {
+					if ref.val == "" || allEntityNames[ref.val] || IsVanillaType(ref.val) {
+						continue
+					}
+					reports = append(reports, ConflictReport{
+						Level: "risk", Category: "compat",
+						ModA: ext.Folder,
+						Message: fmt.Sprintf("%s %s=%q 在所有已安装模组中均未找到", e.Name, ref.field, ref.val),
+						Detail: "需确认依赖模组是否已安装",
+					})
+				}
+			}
+		}
+	}
+
+	// ══ Phase E: Incompatible declarations ═══════════════════════════
 	all := append(rulesets, extensions...)
 	for _, mod := range all {
 		for _, tgt := range a.findIncompatibles(mod) {

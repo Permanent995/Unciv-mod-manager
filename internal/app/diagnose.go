@@ -56,10 +56,18 @@ func (a *App) DiagnoseMods() ([]DiagIssue, error) {
 			// Deprecated unique patterns
 			for _, rule := range deprecatedRules {
 				if strings.Contains(content, rule.Pattern) {
+					msg := fmt.Sprintf("%s — 废弃语法", e.Name())
+					detail := rule.Pattern
+					if rule.Description != "" {
+						msg = fmt.Sprintf("%s — %s", e.Name(), rule.Description)
+					}
+					if rule.Replacement != "" {
+						detail = "替代: " + rule.Replacement
+					}
 					issues = append(issues, DiagIssue{
 						Mod: mod.Folder, Severity: rule.Severity,
-						Message: fmt.Sprintf("%s — %s", e.Name(), rule.Description),
-						Detail:  "替代: " + rule.Replacement,
+						Message: msg,
+						Detail:  detail,
 					})
 				}
 			}
@@ -100,21 +108,6 @@ func (a *App) DiagnoseMods() ([]DiagIssue, error) {
 				}
 				issues = append(issues, DiagIssue{Mod: mod.Folder, Severity: "error",
 					Message: fmt.Sprintf("%s 引用不存在的 %s=%q", ent.Name, ref.field, ref.val)})
-			}
-		}
-
-		// ── Entity references: own + vanilla ──
-		for _, ent := range entities {
-			for _, ref := range []struct{ field, val string }{
-				{"replaces", ent.Replaces},
-				{"upgradesTo", ent.UpgradesTo},
-			} {
-				if ref.val == "" || localNames[ref.val] || IsVanillaType(ref.val) {
-					continue
-				}
-				issues = append(issues, DiagIssue{Mod: mod.Folder, Severity: "warning",
-					Message: fmt.Sprintf("%s %s=%q 在本模组和原版中均未找到", ent.Name, ref.field, ref.val),
-					Detail: "可能依赖其他模组"})
 			}
 		}
 
@@ -240,7 +233,7 @@ func walkTechsForPosition(v gjson.Result, occupied *map[tpos]string, issues *[]D
 		if techsArr := v.Get("techs"); techsArr.Exists() && techsArr.IsArray() {
 			techsArr.ForEach(func(_, tech gjson.Result) bool {
 				row := int(tech.Get("row").Int())
-				p :=tpos{row, col}
+				p := tpos{row, col}
 				name := tech.Get("name").String()
 				if existing, ok := (*occupied)[p]; ok {
 					*issues = append(*issues, DiagIssue{Mod: modName, Severity: "error",
@@ -257,7 +250,7 @@ func walkTechsForPosition(v gjson.Result, occupied *map[tpos]string, issues *[]D
 	row := int(v.Get("row").Int())
 	col := int(v.Get("columnNumber").Int())
 	if row > 0 || col > 0 { // has position
-		p :=tpos{row, col}
+		p := tpos{row, col}
 		name := v.Get("name").String()
 		if existing, ok := (*occupied)[p]; ok {
 			*issues = append(*issues, DiagIssue{Mod: modName, Severity: "error",
@@ -303,6 +296,7 @@ func walkEntity(v gjson.Result, ft, modName, fileName string, entities *[]Entity
 		RequiredResource: v.Get("requiredResource").String(),
 		Replaces:         v.Get("replaces").String(),
 		UpgradesTo:       v.Get("upgradesTo").String(),
+		UniqueTo:         v.Get("uniqueTo").String(),
 	})
 	(*nameCount)[fileName+":"+n]++
 }

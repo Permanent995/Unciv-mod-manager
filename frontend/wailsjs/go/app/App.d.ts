@@ -4,6 +4,8 @@ import {app} from '../models';
 
 export function AnalyzeConflicts():Promise<Array<app.ConflictReport>>;
 
+export function ArchiveSave(arg1:string):Promise<string>;
+
 export function AutoDetectUncivPath():Promise<string>;
 
 export function BackupMod(arg1:string,arg2:string):Promise<string>;
@@ -28,9 +30,13 @@ export function ConvertWesnothMap(arg1:string):Promise<string>;
 
 export function DeleteBackup(arg1:string):Promise<void>;
 
+export function DeleteMap(arg1:string):Promise<void>;
+
 export function DeleteMod(arg1:string):Promise<void>;
 
 export function DeleteSave(arg1:string):Promise<void>;
+
+export function DeleteSaveArchive(arg1:string):Promise<void>;
 
 export function DiagnoseMods():Promise<Array<app.DiagIssue>>;
 
@@ -52,6 +58,8 @@ export function GetAppConfig():Promise<app.AppConfig>;
 
 export function GetDownloadList():Promise<Array<app.DownloadTask>>;
 
+export function GetUMMVersion():Promise<string>;
+
 export function GetUncivInfo():Promise<Record<string, any>>;
 
 export function GetUncivVersion():Promise<string>;
@@ -65,6 +73,8 @@ export function IsUncivRunning():Promise<boolean>;
 export function LaunchUnciv():Promise<void>;
 
 export function ListBackups():Promise<Array<app.ModBackup>>;
+
+export function ListSaveArchives():Promise<Array<app.SaveArchive>>;
 
 export function OpenSnapshotFolder():Promise<string>;
 
@@ -80,7 +90,11 @@ export function ReadModReadme(arg1:string):Promise<string>;
 
 export function RemoveDownload(arg1:string):Promise<void>;
 
+export function RenameMap(arg1:string,arg2:string):Promise<string>;
+
 export function RestoreBackup(arg1:string):Promise<void>;
+
+export function RestoreSaveArchive(arg1:string):Promise<string>;
 
 export function ResumeDownload(arg1:string):Promise<void>;
 
@@ -88,7 +102,7 @@ export function RetryDownload(arg1:string):Promise<void>;
 
 export function SaveAppConfig(arg1:app.AppConfig):Promise<void>;
 
-export function SaveClipboardAsMap(arg1:string):Promise<void>;
+export function SaveClipboardMap(arg1:string,arg2:string):Promise<string>;
 
 export function ScanMaps():Promise<Array<app.MapInfo>>;
 

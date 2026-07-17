@@ -134,7 +134,7 @@ var vanillaEntityNames = map[string]bool{
 	"Airport": true, "Recycling Center": true, "Spaceport": true,
 	// Wonders
 	"Pyramids": true, "Great Wall": true, "Stonehenge": true, "Oracle": true,
-	"Colossus": true, "Great Library": true, "Hanging Gardens": true,
+	"Colossus": true, "Great Library": true, "The Great Library": true, "Hanging Gardens": true,
 	"Statue of Zeus": true, "Temple of Artemis": true, "Mausoleum of Halicarnassus": true,
 	"Terracotta Army": true, "Great Lighthouse": true, "Parthenon": true,
 	"Chichen Itza": true, "Angkor Wat": true, "Hagia Sophia": true, "Alhambra": true,

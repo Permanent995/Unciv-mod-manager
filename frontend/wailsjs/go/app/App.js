@@ -6,6 +6,10 @@ export function AnalyzeConflicts() {
   return window['go']['app']['App']['AnalyzeConflicts']();
 }
 
+export function ArchiveSave(arg1) {
+  return window['go']['app']['App']['ArchiveSave'](arg1);
+}
+
 export function AutoDetectUncivPath() {
   return window['go']['app']['App']['AutoDetectUncivPath']();
 }
@@ -54,12 +58,20 @@ export function DeleteBackup(arg1) {
   return window['go']['app']['App']['DeleteBackup'](arg1);
 }
 
+export function DeleteMap(arg1) {
+  return window['go']['app']['App']['DeleteMap'](arg1);
+}
+
 export function DeleteMod(arg1) {
   return window['go']['app']['App']['DeleteMod'](arg1);
 }
 
 export function DeleteSave(arg1) {
   return window['go']['app']['App']['DeleteSave'](arg1);
+}
+
+export function DeleteSaveArchive(arg1) {
+  return window['go']['app']['App']['DeleteSaveArchive'](arg1);
 }
 
 export function DiagnoseMods() {
@@ -102,6 +114,10 @@ export function GetDownloadList() {
   return window['go']['app']['App']['GetDownloadList']();
 }
 
+export function GetUMMVersion() {
+  return window['go']['app']['App']['GetUMMVersion']();
+}
+
 export function GetUncivInfo() {
   return window['go']['app']['App']['GetUncivInfo']();
 }
@@ -128,6 +144,10 @@ export function LaunchUnciv() {
 
 export function ListBackups() {
   return window['go']['app']['App']['ListBackups']();
+}
+
+export function ListSaveArchives() {
+  return window['go']['app']['App']['ListSaveArchives']();
 }
 
 export function OpenSnapshotFolder() {
@@ -158,8 +178,16 @@ export function RemoveDownload(arg1) {
   return window['go']['app']['App']['RemoveDownload'](arg1);
 }
 
+export function RenameMap(arg1, arg2) {
+  return window['go']['app']['App']['RenameMap'](arg1, arg2);
+}
+
 export function RestoreBackup(arg1) {
   return window['go']['app']['App']['RestoreBackup'](arg1);
+}
+
+export function RestoreSaveArchive(arg1) {
+  return window['go']['app']['App']['RestoreSaveArchive'](arg1);
 }
 
 export function ResumeDownload(arg1) {
@@ -174,8 +202,8 @@ export function SaveAppConfig(arg1) {
   return window['go']['app']['App']['SaveAppConfig'](arg1);
 }
 
-export function SaveClipboardAsMap(arg1) {
-  return window['go']['app']['App']['SaveClipboardAsMap'](arg1);
+export function SaveClipboardMap(arg1, arg2) {
+  return window['go']['app']['App']['SaveClipboardMap'](arg1, arg2);
 }
 
 export function ScanMaps() {

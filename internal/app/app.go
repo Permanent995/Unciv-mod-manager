@@ -170,6 +170,8 @@ func (a *App) SetUncivPath(path string) error {
 	return a.saveConfig()
 }
 
+func (a *App) GetUMMVersion() string { return UMMVersion }
+
 func (a *App) SetZoomLevel(level int) int {
 	if level < 80 {
 		level = 80

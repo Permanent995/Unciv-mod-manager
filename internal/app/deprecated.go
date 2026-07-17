@@ -105,10 +105,17 @@ func (a *App) CheckDeprecated() ([]DiagIssue, error) {
 func checkDeprecatedIn(mod, file, unique string, issues *[]DiagIssue) {
 	for _, rule := range deprecatedRules {
 		if strings.Contains(unique, rule.Pattern) {
+			detail := fmt.Sprintf("(%s)", rule.Since)
+			if rule.Description != "" {
+				detail += " " + rule.Description
+			}
+			if rule.Replacement != "" {
+				detail += " → " + rule.Replacement
+			}
 			*issues = append(*issues, DiagIssue{
 				Mod: mod, Severity: rule.Severity,
 				Message: fmt.Sprintf("废弃 unique: %q", trimTo(unique, 60)),
-				Detail:  fmt.Sprintf("(%s) %s → %s", rule.Since, rule.Description, rule.Replacement),
+				Detail:  detail,
 			})
 		}
 	}

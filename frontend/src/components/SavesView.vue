@@ -1,11 +1,16 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { ScanSaves, DeleteSave } from '../../wailsjs/go/app/App'
+import { ScanSaves, DeleteSave, ArchiveSave, ListSaveArchives, RestoreSaveArchive, DeleteSaveArchive } from '../../wailsjs/go/app/App'
 
 type SaveInfo = {
   name: string; path: string; fileSize: number
   modifiedAt: string; civName?: string; turn?: number; version?: string
   mods?: string[]
+}
+
+type SaveArchive = {
+  name: string; origName: string; timestamp: string
+  path: string; fileSize: number; modifiedAt: string
 }
 
 const saves = ref<SaveInfo[]>([])
@@ -14,7 +19,12 @@ const msg = ref('')
 const selected = ref<SaveInfo | null>(null)
 const deleting = ref(false)
 
-onMounted(loadSaves)
+// Backup state
+const archives = ref<SaveArchive[]>([])
+const archiving = ref(false)
+const restoring = ref<SaveArchive | null>(null)
+
+onMounted(() => { loadSaves(); loadArchives() })
 
 async function loadSaves() {
   loading.value = true
@@ -30,6 +40,58 @@ async function loadSaves() {
   }
 }
 
+async function loadArchives() {
+  try {
+    archives.value = await ListSaveArchives()
+  } catch (_) { /* ignore */ }
+}
+
+function archivesForCurrent(): SaveArchive[] {
+  if (!selected.value) return []
+  return archives.value.filter(a => a.origName === selected.value!.name)
+}
+
+async function archiveCurrent() {
+  if (!selected.value || archiving.value) return
+  archiving.value = true
+  msg.value = ''
+  try {
+    await ArchiveSave(selected.value.path)
+    msg.value = '已备份: ' + selected.value.name
+    await loadArchives()
+  } catch (e: any) {
+    msg.value = '备份失败: ' + e
+  } finally {
+    archiving.value = false
+  }
+}
+
+async function restoreArchive(a: SaveArchive) {
+  if (restoring.value) return
+  restoring.value = a
+  msg.value = ''
+  try {
+    const dst = await RestoreSaveArchive(a.path)
+    msg.value = '已恢复到: ' + dst
+    await loadSaves()
+  } catch (e: any) {
+    msg.value = '恢复失败: ' + e
+  } finally {
+    restoring.value = null
+  }
+}
+
+async function deleteArchive(a: SaveArchive) {
+  if (!confirm(`确定删除备份 "${a.name}"？`)) return
+  try {
+    await DeleteSaveArchive(a.path)
+    msg.value = '已删除备份: ' + a.name
+    await loadArchives()
+  } catch (e: any) {
+    msg.value = '删除备份失败: ' + e
+  }
+}
+
 async function deleteSave(s: SaveInfo) {
   if (deleting.value) return
   if (!confirm(`确定删除存档 "${s.name}"？\n此操作不可恢复`)) return
@@ -37,7 +99,7 @@ async function deleteSave(s: SaveInfo) {
   msg.value = ''
   try {
     await DeleteSave(s.path)
-    msg.value = `已删除: ${s.name}`
+    msg.value = '已删除: ' + s.name
     saves.value = saves.value.filter(x => x.name !== s.name)
     if (selected.value?.name === s.name) selected.value = null
   } catch (e: any) {
@@ -45,6 +107,11 @@ async function deleteSave(s: SaveInfo) {
   } finally {
     deleting.value = false
   }
+}
+
+function selectSave(s: SaveInfo) {
+  selected.value = s
+  msg.value = ''
 }
 
 function formatSize(n: number): string {
@@ -61,7 +128,7 @@ function formatSize(n: number): string {
       <button class="btn-refresh" :disabled="loading" @click="loadSaves">{{ loading ? '加载中...' : '刷新' }}</button>
     </div>
 
-    <div v-if="msg" class="msg" :class="{ ok: msg.startsWith('已删除') }">{{ msg }}</div>
+    <div v-if="msg" class="msg" :class="{ ok: msg.startsWith('已删除') || msg.startsWith('已备份') || msg.startsWith('已恢复') }">{{ msg }}</div>
 
     <div v-if="loading" class="loading">加载中...</div>
 
@@ -72,7 +139,7 @@ function formatSize(n: number): string {
           :key="s.name"
           class="save-card"
           :class="{ active: selected?.name === s.name }"
-          @click="selected = s"
+          @click="selectSave(s)"
         >
           <div class="save-icon">💾</div>
           <div class="save-info">
@@ -111,7 +178,33 @@ function formatSize(n: number): string {
           <p class="no-mods">无扩展模组</p>
         </div>
 
-        <button class="btn-delete" :disabled="deleting" @click="deleteSave(selected)">{{ deleting ? '删除中...' : '🗑 删除存档' }}</button>
+        <div class="detail-actions">
+          <button class="btn-archive" :disabled="archiving" @click="archiveCurrent">
+            {{ archiving ? '备份中...' : '📦 备份存档' }}
+          </button>
+          <button class="btn-delete" :disabled="deleting" @click="deleteSave(selected)">
+            {{ deleting ? '删除中...' : '🗑 删除存档' }}
+          </button>
+        </div>
+
+        <!-- Backup history -->
+        <div v-if="archivesForCurrent().length > 0" class="archive-section">
+          <h3>备份历史</h3>
+          <div class="archive-list">
+            <div v-for="a in archivesForCurrent()" :key="a.name" class="archive-item">
+              <div class="archive-info">
+                <span class="archive-ts">{{ a.timestamp.replace('_', ' ') }}</span>
+                <span class="archive-size">{{ formatSize(a.fileSize) }}</span>
+              </div>
+              <div class="archive-actions">
+                <button class="btn-restore" :disabled="restoring === a" @click="restoreArchive(a)">
+                  {{ restoring === a ? '恢复中...' : '恢复' }}
+                </button>
+                <button class="btn-del-arc" @click="deleteArchive(a)">删除</button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -129,7 +222,7 @@ function formatSize(n: number): string {
 .btn-refresh { padding: 8px 16px; background: var(--accent); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 600; }
 .btn-refresh:disabled { opacity: 0.6; cursor: not-allowed; }
 .msg { padding: 10px 14px; border-radius: 4px; margin-bottom: 12px; font-size: 14px; background: rgba(74,158,255,0.08); color: var(--accent); }
-.msg.ok { background: rgba(255,77,79,0.08); color: var(--danger); }
+.msg.ok { background: rgba(34,197,94,0.08); color: var(--success); }
 .loading, .empty { text-align: center; padding: 60px; color: var(--text-muted); }
 .hint { font-size: 13px; margin-top: 8px; color: var(--text-muted); }
 
@@ -160,13 +253,35 @@ function formatSize(n: number): string {
 .dk { width: 70px; color: var(--text-muted); flex-shrink: 0; }
 .dv { color: var(--text-primary); font-weight: 600; }
 
-.mods-section { margin-bottom: 20px; }
+.mods-section { margin-bottom: 16px; }
 .mods-section h3 { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
 .mods-list { display: flex; flex-wrap: wrap; gap: 6px; }
 .mod-tag { padding: 3px 10px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 4px; font-size: 13px; color: var(--text-primary); font-weight: 600; }
 .no-mods { font-size: 13px; color: var(--text-muted); }
 
+.detail-actions { display: flex; gap: 8px; margin-bottom: 16px; }
+.btn-archive { padding: 8px 18px; background: rgba(34,197,94,0.08); color: var(--success); border: 1px solid var(--success); border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 600; }
+.btn-archive:hover { background: rgba(34,197,94,0.18); }
+.btn-archive:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-delete { padding: 8px 18px; background: rgba(255,77,79,0.1); color: var(--danger); border: 1px solid var(--danger); border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 600; }
 .btn-delete:hover { background: rgba(255,77,79,0.2); }
 .btn-delete:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.archive-section { margin-bottom: 16px; }
+.archive-section h3 { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+.archive-list { display: flex; flex-direction: column; gap: 4px; }
+.archive-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px; background: var(--bg-card); border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+.archive-info { display: flex; gap: 12px; align-items: center; font-size: 13px; }
+.archive-ts { font-weight: 600; color: var(--text-primary); }
+.archive-size { color: var(--text-muted); }
+.archive-actions { display: flex; gap: 6px; }
+.btn-restore { padding: 3px 10px; background: rgba(74,158,255,0.08); color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; }
+.btn-restore:hover { background: rgba(74,158,255,0.18); }
+.btn-restore:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-del-arc { padding: 3px 10px; background: rgba(255,77,79,0.08); color: var(--danger); border: 1px solid var(--danger); border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; }
+.btn-del-arc:hover { background: rgba(255,77,79,0.18); }
 </style>

@@ -344,6 +344,28 @@ export namespace app {
 	        this.customProxy = source["customProxy"];
 	    }
 	}
+	export class SaveArchive {
+	    name: string;
+	    origName: string;
+	    timestamp: string;
+	    path: string;
+	    fileSize: number;
+	    modifiedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SaveArchive(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.origName = source["origName"];
+	        this.timestamp = source["timestamp"];
+	        this.path = source["path"];
+	        this.fileSize = source["fileSize"];
+	        this.modifiedAt = source["modifiedAt"];
+	    }
+	}
 	export class SaveInfo {
 	    name: string;
 	    path: string;

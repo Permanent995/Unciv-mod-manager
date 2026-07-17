@@ -327,7 +327,7 @@ function catColor(c: string): string {
 </template>
 
 <style scoped>
-.mods-view { height: 100%; display: flex; flex-direction: column; }
+.mods-view { height: 100%; display: flex; flex-direction: column; min-height: 0; }
 .view-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-shrink: 0; }
 .view-header h1 { font-size: 24px; font-weight: 600; }
 .header-right { display: flex; align-items: center; gap: 12px; }
@@ -342,10 +342,13 @@ function catColor(c: string): string {
 .no-path-warning { background: var(--danger); color: #fff; padding: 10px; border-radius: 4px; margin-bottom: 12px; flex-shrink: 0; }
 .loading, .empty-state { text-align: center; padding: 40px; color: var(--text-muted); }
 
-.master-detail { display: flex; flex: 1; overflow: hidden; gap: 0; }
+.master-detail { display: flex; flex: 1; overflow: hidden; gap: 0; min-height: 0; }
 
 /* Left list */
 .mod-list { width: 260px; flex-shrink: 0; overflow-y: auto; background: var(--bg-card); border-radius: 6px; }
+.mod-list::-webkit-scrollbar { width: 6px; }
+.mod-list::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+.mod-list::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 .mod-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border-color); transition: background 0.12s; gap: 6px; color: var(--text-primary); }
 .mod-item:last-child { border-bottom: none; }
 .mod-item:hover { background: var(--sidebar-active); }

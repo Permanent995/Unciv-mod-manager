@@ -248,6 +248,6 @@ body {
 .app-root { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .app-root.pos-right { direction: rtl; }
 .app-root.pos-right .main-content { direction: ltr; }
-.app-body { display: flex; flex: 1; overflow: hidden; width: 100%; }
-.main-content { flex: 1; overflow-y: auto; padding: 20px; background: var(--bg-primary); --wails-draggable: no-drag; }
+.app-body { display: flex; flex: 1; overflow: hidden; width: 100%; min-height: 0; }
+.main-content { flex: 1; overflow: hidden; padding: 20px; background: var(--bg-primary); --wails-draggable: no-drag; min-height: 0; }
 </style>

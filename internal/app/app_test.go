@@ -156,7 +156,7 @@ func TestTrimTo(t *testing.T) {
 
 func TestCheckDeprecatedIn(t *testing.T) {
 	issues := make([]DiagIssue, 0)
-	checkDeprecatedIn("TestMod", "Buildings.json", "Food consumption by specialists ", &issues)
+	checkDeprecatedIn("TestMod", "Buildings.json", "Doubles Gold given to enemy if city is captured", &issues)
 	if len(issues) != 1 {
 		t.Fatalf("expected 1 issue, got %d", len(issues))
 	}

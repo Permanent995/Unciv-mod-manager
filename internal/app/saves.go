@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
+	"time"
 
 	"github.com/tidwall/gjson"
 )
@@ -19,6 +21,16 @@ type SaveInfo struct {
 	Turn       int      `json:"turn,omitempty"`
 	Version    string   `json:"version,omitempty"`
 	Mods       []string `json:"mods,omitempty"`
+}
+
+// SaveArchive describes one save backup in AppData/umm_backups/saves/.
+type SaveArchive struct {
+	Name       string `json:"name"`
+	OrigName   string `json:"origName"`
+	Timestamp  string `json:"timestamp"`
+	Path       string `json:"path"`
+	FileSize   int64  `json:"fileSize"`
+	ModifiedAt string `json:"modifiedAt"`
 }
 
 // ScanSaves reads the SaveFiles/ directory and returns save metadata.
@@ -79,6 +91,87 @@ func (a *App) DeleteSave(path string) error {
 	}
 	return os.Remove(absPath)
 }
+
+// ── Save Backup / Archive ──
+
+// ArchiveSave copies a save file to AppData/umm_backups/saves/.
+func (a *App) ArchiveSave(savePath string) (string, error) {
+	if savePath == "" {
+		return "", fmt.Errorf("路径为空")
+	}
+	fi, err := os.Stat(savePath)
+	if err != nil {
+		return "", fmt.Errorf("存档文件不存在: %w", err)
+	}
+
+	backupRoot := filepath.Join(a.configDir, "umm_backups", "saves")
+	os.MkdirAll(backupRoot, 0755)
+
+	ts := time.Now().Format("2006-01-02_150405")
+	dst := filepath.Join(backupRoot, fi.Name()+"_"+ts)
+	if err := copyFile(savePath, dst); err != nil {
+		return "", fmt.Errorf("备份存档失败: %w", err)
+	}
+	return dst, nil
+}
+
+// ListSaveArchives returns all save backups grouped by original filename.
+func (a *App) ListSaveArchives() ([]SaveArchive, error) {
+	backupRoot := filepath.Join(a.configDir, "umm_backups", "saves")
+	entries, err := os.ReadDir(backupRoot)
+	if err != nil {
+		return []SaveArchive{}, nil
+	}
+	var archives []SaveArchive
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		fi, err := e.Info()
+		if err != nil {
+			continue
+		}
+		// Parse original name: "filename_2026-07-17_150405"
+		orig := e.Name()
+		ts := ""
+		if idx := strings.LastIndex(e.Name(), "_20"); idx != -1 && len(e.Name()) > idx+1+15 {
+			orig = e.Name()[:idx]
+			ts = e.Name()[idx+1:]
+		}
+		archives = append(archives, SaveArchive{
+			Name:       e.Name(),
+			OrigName:   orig,
+			Timestamp:  ts,
+			Path:       filepath.Join(backupRoot, e.Name()),
+			FileSize:   fi.Size(),
+			ModifiedAt: fi.ModTime().Format("2006-01-02 15:04"),
+		})
+	}
+	return archives, nil
+}
+
+// RestoreSaveArchive copies a save backup back to SaveFiles/.
+func (a *App) RestoreSaveArchive(backupPath string) (string, error) {
+	if backupPath == "" {
+		return "", fmt.Errorf("路径为空")
+	}
+	_, err := os.Stat(backupPath)
+	if err != nil {
+		return "", fmt.Errorf("备份文件不存在: %w", err)
+	}
+	target := filepath.Join(a.config.UncivPath, "SaveFiles", filepath.Base(backupPath))
+	if err := copyFile(backupPath, target); err != nil {
+		return "", fmt.Errorf("恢复存档失败: %w", err)
+	}
+	return target, nil
+}
+
+// DeleteSaveArchive removes a save backup.
+func (a *App) DeleteSaveArchive(backupPath string) error {
+	return os.Remove(backupPath)
+}
+
+// ── Save Metadata Parsing ──
 
 func (s *SaveInfo) tryParseMetadata(fp string) {
 	data, err := os.ReadFile(fp)
