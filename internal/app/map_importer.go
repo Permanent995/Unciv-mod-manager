@@ -258,13 +258,13 @@ func (a *App) importZipFile(sourcePath, uncivPath string) (string, error) {
 }
 
 func (a *App) backupUnknownFile(sourcePath, uncivPath, name string) (string, error) {
-	backupDir := filepath.Join(uncivPath, "maps", "backup")
+	backupDir := filepath.Join(a.configDir, "umm_backups", "mapback")
 	os.MkdirAll(backupDir, 0755)
 	dest := filepath.Join(backupDir, name)
 	if err := copyFile(sourcePath, dest); err != nil {
 		return "", fmt.Errorf("备份文件失败: %w", err)
 	}
-	return fmt.Sprintf("已备份 %q 到 maps/backup/（格式暂不支持，可手动处理）", name), nil
+	return fmt.Sprintf("已备份 %q 到 mapback/（格式暂不支持，可手动处理）", name), nil
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────

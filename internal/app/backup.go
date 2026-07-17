@@ -31,7 +31,7 @@ func (a *App) BackupMod(modFolder, version string) (string, error) {
 	if version == "" {
 		version = readModVersion(src)
 	}
-	backupRoot := filepath.Join(a.configDir, "umm_backups")
+	backupRoot := filepath.Join(a.configDir, "umm_backups", "modback")
 	os.MkdirAll(backupRoot, 0755)
 
 	ts := time.Now().Format("2006-01-02_150405")
@@ -49,7 +49,7 @@ func (a *App) BackupMod(modFolder, version string) (string, error) {
 
 // ListBackups returns all backups across all mods, sorted by time desc.
 func (a *App) ListBackups() ([]ModBackup, error) {
-	backupRoot := filepath.Join(a.configDir, "umm_backups")
+	backupRoot := filepath.Join(a.configDir, "umm_backups", "modback")
 	entries, err := os.ReadDir(backupRoot)
 	if err != nil {
 		return []ModBackup{}, nil
