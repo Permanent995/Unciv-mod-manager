@@ -1,6 +1,7 @@
 package app
 
 import (
+	"net/url"
 	"testing"
 )
 
@@ -184,10 +185,10 @@ func TestDeprecatedRulesList(t *testing.T) {
 
 // ── Mirrors ──
 
-func TestGetMirrors(t *testing.T) {
-	m := getMirrors()
+func TestDefaultMirrors(t *testing.T) {
+	m := defaultMirrors()
 	if len(m) == 0 {
-		t.Fatal("getMirrors() returned empty list")
+		t.Fatal("defaultMirrors() returned empty list")
 	}
 	for i, url := range m {
 		if url == "" {
@@ -320,21 +321,22 @@ func TestWesnothTerrain(t *testing.T) {
 	}
 }
 
-// ── urlEncode ──
+// ── url.QueryEscape ──
 
-func TestUrlEncode(t *testing.T) {
+func TestUrlQueryEscape(t *testing.T) {
 	tests := []struct {
 		input string
 		want  string
 	}{
-		{"hello world", "hello%20world"},
+		{"hello world", "hello+world"},
 		{"abc", "abc"},
-		{"a b c", "a%20b%20c"},
+		{"a b:c", "a+b%3Ac"},
+		{"q=go&lang=en", "q%3Dgo%26lang%3Den"},
 	}
 	for _, tt := range tests {
-		got := urlEncode(tt.input)
+		got := url.QueryEscape(tt.input)
 		if got != tt.want {
-			t.Errorf("urlEncode(%q) = %q, want %q", tt.input, got, tt.want)
+			t.Errorf("url.QueryEscape(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
 }
@@ -364,6 +366,69 @@ func TestApplyMirror(t *testing.T) {
 		got := applyMirror("https://github.com/user/repo", "", "")
 		if got != "https://github.com/user/repo" {
 			t.Errorf("null mode: got %q", got)
+		}
+	})
+}
+
+func TestEvaluateConflict_Extended(t *testing.T) {
+	t.Run("TRY_INJECT same Strength zero one side", func(t *testing.T) {
+		// Strength=0 on one side means "not set" — should not flag diff
+		a := Entity{Name: "Spearman", FileType: "Units.json", Strength: 0, MergeAction: "TRY_INJECT"}
+		b := Entity{Name: "Spearman", FileType: "Units.json", Strength: 15, MergeAction: "TRY_INJECT"}
+		level, _, _ := evaluateConflict(a, b)
+		if level != "safe" {
+			t.Errorf("zero Strength on one side: level=%q, want safe", level)
+		}
+	})
+
+	t.Run("TRY_INJECT Cost diff only", func(t *testing.T) {
+		a := Entity{Name: "Library", FileType: "Buildings.json", Cost: 80, MergeAction: "TRY_INJECT"}
+		b := Entity{Name: "Library", FileType: "Buildings.json", Cost: 120, MergeAction: "TRY_INJECT"}
+		level, _, _ := evaluateConflict(a, b)
+		if level != "risk" {
+			t.Errorf("Cost diff: level=%q, want risk", level)
+		}
+	})
+
+	t.Run("TRY_INJECT both zero Cost and Strength", func(t *testing.T) {
+		a := Entity{Name: "Warrior", FileType: "Units.json", Strength: 0, Cost: 0, MergeAction: "TRY_INJECT"}
+		b := Entity{Name: "Warrior", FileType: "Units.json", Strength: 0, Cost: 0, MergeAction: "TRY_INJECT"}
+		level, _, _ := evaluateConflict(a, b)
+		if level != "safe" {
+			t.Errorf("both zero: level=%q, want safe", level)
+		}
+	})
+
+	t.Run("one empty one TRY_INJECT", func(t *testing.T) {
+		a := Entity{Name: "Settler", FileType: "Units.json", MergeAction: ""}
+		b := Entity{Name: "Settler", FileType: "Units.json", Strength: 5, MergeAction: "TRY_INJECT"}
+		level, _, _ := evaluateConflict(a, b)
+		if level != "override" {
+			t.Errorf("empty vs TRY_INJECT: level=%q, want override", level)
+		}
+	})
+
+	t.Run("both empty same values", func(t *testing.T) {
+		a := Entity{Name: "Worker", FileType: "Units.json", Strength: 10}
+		b := Entity{Name: "Worker", FileType: "Units.json", Strength: 10}
+		level, _, _ := evaluateConflict(a, b)
+		if level != "override" {
+			t.Errorf("both empty same: level=%q, want override", level)
+		}
+	})
+
+	t.Run("both empty different Strength", func(t *testing.T) {
+		a := Entity{Name: "Swordman", FileType: "Units.json", Strength: 15}
+		b := Entity{Name: "Swordman", FileType: "Units.json", Strength: 20}
+		level, msg, detail := evaluateConflict(a, b)
+		if level != "override" {
+			t.Errorf("both empty diff: level=%q, want override", level)
+		}
+		if detail == "" {
+			t.Errorf("expected non-empty detail for scalar diff")
+		}
+		if msg == "" {
+			t.Errorf("expected non-empty message")
 		}
 	})
 }

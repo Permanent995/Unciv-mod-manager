@@ -62,6 +62,8 @@ export function GetDownloadList():Promise<Array<app.DownloadTask>>;
 
 export function GetLogFiles():Promise<Array<string>>;
 
+export function GetMirrorHealth():Promise<Array<app.MirrorInfo>>;
+
 export function GetUMMVersion():Promise<string>;
 
 export function GetUncivInfo():Promise<Record<string, any>>;
@@ -129,6 +131,8 @@ export function StartDownload(arg1:string,arg2:string):Promise<string>;
 export function StartDownloadWithMirror(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function TestMirrorsLatency():Promise<Record<string, number>>;
+
+export function TestSingleMirror(arg1:string):Promise<number>;
 
 export function TranslateText(arg1:string):Promise<string>;
 

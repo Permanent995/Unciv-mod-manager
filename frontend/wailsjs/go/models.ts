@@ -17,6 +17,9 @@ export namespace app {
 	    mpServer: string;
 	    mpUid: string;
 	    mpPassword: string;
+	    customMirrors: string[];
+	    mirrorMode: string;
+	    selectedMirror: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppConfig(source);
@@ -40,6 +43,9 @@ export namespace app {
 	        this.mpServer = source["mpServer"];
 	        this.mpUid = source["mpUid"];
 	        this.mpPassword = source["mpPassword"];
+	        this.customMirrors = source["customMirrors"];
+	        this.mirrorMode = source["mirrorMode"];
+	        this.selectedMirror = source["selectedMirror"];
 	    }
 	}
 	export class ConflictReport {
@@ -206,6 +212,28 @@ export namespace app {
 	        this.path = source["path"];
 	        this.source = source["source"];
 	        this.modFolder = source["modFolder"];
+	    }
+	}
+	export class MirrorInfo {
+	    url: string;
+	    label: string;
+	    latency: number;
+	    alive: boolean;
+	    isCustom: boolean;
+	    lastChecked: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new MirrorInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.url = source["url"];
+	        this.label = source["label"];
+	        this.latency = source["latency"];
+	        this.alive = source["alive"];
+	        this.isCustom = source["isCustom"];
+	        this.lastChecked = source["lastChecked"];
 	    }
 	}
 	export class ModBackup {

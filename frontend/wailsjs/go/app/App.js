@@ -122,6 +122,10 @@ export function GetLogFiles() {
   return window['go']['app']['App']['GetLogFiles']();
 }
 
+export function GetMirrorHealth() {
+  return window['go']['app']['App']['GetMirrorHealth']();
+}
+
 export function GetUMMVersion() {
   return window['go']['app']['App']['GetUMMVersion']();
 }
@@ -256,6 +260,10 @@ export function StartDownloadWithMirror(arg1, arg2, arg3) {
 
 export function TestMirrorsLatency() {
   return window['go']['app']['App']['TestMirrorsLatency']();
+}
+
+export function TestSingleMirror(arg1) {
+  return window['go']['app']['App']['TestSingleMirror'](arg1);
 }
 
 export function TranslateText(arg1) {

@@ -96,9 +96,12 @@ func (a *App) parseModInfo(modPath, folderName string) (ModInfo, error) {
 		}
 	}
 	info.LastUpdated = gjson.Get(content, "lastUpdated").String()
+
+	// Single walk to collect both size and category heuristics
+	scan := scanModDirectory(modPath)
 	info.ModSize = int(gjson.Get(content, "modSize").Int())
 	if info.ModSize == 0 {
-		info.ModSize = dirSize(modPath)
+		info.ModSize = scan.totalSize
 	}
 	info.IsBaseRuleset = gjson.Get(content, "isBaseRuleset").Bool()
 
@@ -109,14 +112,14 @@ func (a *App) parseModInfo(modPath, folderName string) (ModInfo, error) {
 		return true
 	})
 
-	// Determine category
-	info.Category = a.categorizeMod(info.Topics, info.IsBaseRuleset, modPath)
+	// Determine category (uses pre-scanned booleans, no extra walk)
+	info.Category = a.categorizeMod(info.Topics, info.IsBaseRuleset, scan.hasImagesOnly, scan.hasMusic, scan.hasJSONDir)
 
 	return info, nil
 }
 
 // categorizeMod determines the mod category based on metadata and folder structure.
-func (a *App) categorizeMod(topics []string, isBaseRuleset bool, modPath string) string {
+func (a *App) categorizeMod(topics []string, isBaseRuleset bool, hasImagesOnly, hasMusic, hasJSONDir bool) string {
 	topicSet := make(map[string]bool)
 	for _, t := range topics {
 		topicSet[t] = true
@@ -144,63 +147,69 @@ func (a *App) categorizeMod(topics []string, isBaseRuleset bool, modPath string)
 		return "map"
 	}
 
-	// Fallback: check folder structure
-	if hasOnlyImageFiles(modPath) {
+	// Fallback: check folder structure (uses pre-scanned booleans, no extra walk)
+	if hasImagesOnly {
 		return "graphics"
 	}
-	if hasMusicFiles(modPath) {
+	if hasMusic {
 		return "audio"
 	}
-	if hasJSONDir(modPath) {
+	if hasJSONDir {
 		return "unclassified"
 	}
 
 	return "unclassified"
 }
 
+// modScanResult holds info collected during a single directory walk.
+type modScanResult struct {
+	totalSize     int
+	hasImagesOnly bool // has images AND no JSON files (pure graphics mod)
+	hasMusic      bool
+	hasJSONDir    bool
+}
+
+// scanModDirectory walks a mod folder once to collect size, image, and music info.
+func scanModDirectory(modPath string) modScanResult {
+	imageExts := map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".atlas": true}
+	var result modScanResult
+	var totalSize int64
+	foundImage := false
+	foundJSON := false
+	foundMusic := false
+
+	filepath.Walk(modPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		totalSize += info.Size()
+		ext := strings.ToLower(filepath.Ext(info.Name()))
+		switch ext {
+		case ".json":
+			foundJSON = true
+		case ".mp3", ".ogg":
+			foundMusic = true
+		default:
+			if imageExts[ext] {
+				foundImage = true
+			}
+		}
+		return nil
+	})
+
+	result.totalSize = int(totalSize)
+	result.hasImagesOnly = foundImage && !foundJSON
+	result.hasMusic = foundMusic
+	// Check for jsons/ directory (separate Stat, not a filesystem walk)
+	_, err := os.Stat(filepath.Join(modPath, "jsons"))
+	result.hasJSONDir = err == nil
+	return result
+}
+
 // hasJSONDir checks if the mod folder has a jsons/ subdirectory.
 func hasJSONDir(modPath string) bool {
 	_, err := os.Stat(filepath.Join(modPath, "jsons"))
 	return err == nil
-}
-
-// hasOnlyImageFiles checks if the mod folder primarily contains image files.
-func hasOnlyImageFiles(modPath string) bool {
-	imageExts := map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".atlas": true}
-	hasImages := false
-	hasJSON := false
-
-	filepath.Walk(modPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
-			return nil
-		}
-		if strings.ToLower(filepath.Ext(info.Name())) == ".json" {
-			hasJSON = true
-		}
-		if imageExts[strings.ToLower(filepath.Ext(info.Name()))] {
-			hasImages = true
-		}
-		return nil
-	})
-
-	return hasImages && !hasJSON
-}
-
-// hasMusicFiles checks for MP3/OGG files.
-func hasMusicFiles(modPath string) bool {
-	found := false
-	filepath.Walk(modPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
-			return nil
-		}
-		ext := strings.ToLower(filepath.Ext(info.Name()))
-		if ext == ".mp3" || ext == ".ogg" {
-			found = true
-			return filepath.SkipDir
-		}
-		return nil
-	})
-	return found
 }
 
 // ReadModPreview returns the base64-encoded preview.png for a mod, or empty.
@@ -213,7 +222,7 @@ func (a *App) ReadModPreview(folderName string) string {
 		return ""
 	}
 	// Return as base64 data URI for direct use in <img src="...">
-	return "data:image/png;base64," + base64Encode(data)
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(data)
 }
 
 // ReadModReadme returns the content of a mod's README.md, or empty string.
@@ -226,19 +235,3 @@ func (a *App) ReadModReadme(folderName string) string {
 	return string(data)
 }
 
-func base64Encode(data []byte) string {
-	return base64.StdEncoding.EncodeToString(data)
-}
-
-// dirSize returns the total size of all files in a directory in bytes.
-func dirSize(path string) int {
-	var total int64
-	filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
-			return nil
-		}
-		total += info.Size()
-		return nil
-	})
-	return int(total)
-}

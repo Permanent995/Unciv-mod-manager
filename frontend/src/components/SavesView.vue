@@ -51,8 +51,8 @@ async function loadArchives(origName: string): Promise<void> {
   try {
     const all = await ListSaveArchives()
     archives.value = all.filter(a => a.origName === origName)
-  } catch {
-    // silently fail
+  } catch (e: unknown) {
+    msg.value = '加载备份失败: ' + String(e)
   } finally {
     archivesLoading.value = false
   }

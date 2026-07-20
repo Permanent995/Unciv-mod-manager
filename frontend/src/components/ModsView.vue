@@ -131,9 +131,13 @@ function formatTs(ts: string): string { return ts.replace(/_/g, ' ') }
 const categoryOrder = ['ruleset', 'expansion', 'graphics', 'audio', 'map', 'fun', 'unclassified']
 
 onMounted(async () => {
-  const config = await GetAppConfig()
-  uncivPath.value = config.uncivPath || ''
-  await loadMods()
+  try {
+    const config = await GetAppConfig()
+    uncivPath.value = config.uncivPath || ''
+    await loadMods()
+  } catch (e: any) {
+    delMsg.value = '加载失败: ' + e
+  }
 })
 
 async function loadMods() {
@@ -141,8 +145,8 @@ async function loadMods() {
   try {
     mods.value = await ScanMods()
     if (mods.value.length > 0 && !selected.value) selected.value = mods.value[0]
-  } catch (e) {
-    console.error(e)
+  } catch (e: any) {
+    delMsg.value = '扫描模组失败: ' + e
   } finally { loading.value = false }
 }
 
@@ -213,6 +217,7 @@ function catColor(c: string): string {
     </div>
 
     <!-- Update notification -->
+    <div v-if="delMsg" class="toast">{{ delMsg }}</div>
     <div v-if="updateMsg" class="update-banner" :class="updateMsgType">
       <span>{{ updateMsg }}</span>
       <div v-if="updates.some(u => u.hasUpdate)" class="update-actions">

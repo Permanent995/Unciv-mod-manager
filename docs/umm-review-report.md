@@ -1,14 +1,16 @@
 # UMM 全面审查报告
 
-**审查日期**: 2026-07-16
+**审查日期**: 2026-07-16（状态更新: 2026-07-20）
 **审查范围**: Go 后端（15文件）、Vue 前端（12组件）、项目配置、前后端联动
 **原则**: 只报告问题，不修改代码
+
+**整体进展**: 15 项中 **8 项已修**、**2 项部分修**、**2 项无需处理**、**2 项待修**、**1 项外部问题**
 
 ---
 
 ## 一、严重问题（必须修复）
 
-### 1. 🔴 backup.go: `_backup_info.json` 残留到 mods/ 目录
+### 1. 🔴 backup.go: `_backup_info.json` 残留到 mods/ 目录 — ✅ 已修
 
 **文件**: `internal/app/backup.go:45`
 
@@ -20,7 +22,7 @@
 
 **修复建议**: `RestoreBackup()` 中 `os.Rename` 后应删除 `_backup_info.json`，或在 `BackupMod()` 中将元数据写入独立的索引文件而非备份目录内。
 
-### 2. 🔴 backup.go: `RestoreBackup()` 先 Rename 再 RemoveAll 的竞态条件
+### 2. 🔴 backup.go: `RestoreBackup()` 先 Rename 再 RemoveAll 的竞态条件 — ✅ 已修
 
 **文件**: `internal/app/backup.go:104-110`
 
@@ -35,7 +37,7 @@ return os.Rename(backupPath, target)     // 恢复旧版本
 
 **修复建议**: `os.RemoveAll` 应在 `BackupMod` 之前执行，或改用 copy+delete 替代 Rename。
 
-### 3. 🔴 Unciv.json: vmArgs 末尾有孤立的 `"-"`
+### 3. 🔴 Unciv.json: vmArgs 末尾有孤立的 `"-"` — ❌ 外部文件
 
 **文件**: `C:\Users\drj13\Desktop\官方unciv文件\Unciv.json`
 
@@ -49,7 +51,7 @@ return os.Rename(backupPath, target)     // 恢复旧版本
 
 ## 二、一般问题（建议修复）
 
-### 4. 🟡 downloader.go: `dlTasks` map 无并发上限保护
+### 4. 🟡 downloader.go: `dlTasks` map 无并发上限保护 — ✅ 已修
 
 **文件**: `internal/app/downloader.go`
 
@@ -57,13 +59,13 @@ return os.Rename(backupPath, target)     // 恢复旧版本
 
 **修复建议**: 在 `StartDownload` 入口检查当前 downloading 状态的任务数。
 
-### 5. 🟡 downloader.go: `speedSamples` 切片无上限
+### 5. 🟡 downloader.go: `speedSamples` 切片无上限 — ❌ 待修
 
 **文件**: `internal/app/downloader.go`
 
 **问题**: 3 秒滑动窗口通过 `calculateSpeed` 清理过期样本，但如果进度更新频率极高，切片可能短暂膨胀。
 
-### 6. 🟡 scanner.go: `dirSize()` 对大模组性能差
+### 6. 🟡 scanner.go: `dirSize()` 对大模组性能差 — ✅ 已修
 
 **文件**: `internal/app/scanner.go:234-244`
 
@@ -71,13 +73,13 @@ return os.Rename(backupPath, target)     // 恢复旧版本
 
 **修复建议**: 缓存模组大小，只在 `ModOptions.json` 的修改时间变化时重新计算。
 
-### 7. 🟡 scanner.go: `hasOnlyImageFiles()` 和 `hasMusicFiles()` 重复遍历
+### 7. 🟡 scanner.go: `hasOnlyImageFiles()` 和 `hasMusicFiles()` 重复遍历 — ✅ 已修
 
 **文件**: `internal/app/scanner.go:168-204`
 
 **问题**: `categorizeMod` 依次调用 `hasOnlyImageFiles` 和 `hasMusicFiles`，每个都独立 `filepath.Walk` 整个模组目录。可以合并为一次遍历。
 
-### 8. 🟡 game_link.go: `GetUncivVersion` 在 `onMounted` 时调用
+### 8. 🟡 game_link.go: `GetUncivVersion` 在 `onMounted` 时调用 — ⚪ 无需处理
 
 **文件**: `frontend/src/components/Sidebar.vue:32-36`
 
@@ -85,19 +87,19 @@ return os.Rename(backupPath, target)     // 恢复旧版本
 
 **修复建议**: 缓存版本号到 AppConfig，只在路径变更时重新读取。
 
-### 9. 🟡 前端: 多个组件缺少错误边界
+### 9. 🟡 前端: 多个组件缺少错误边界 — ✅ 已修
 
 **文件**: `ModsView.vue`, `SavesView.vue`, `BrowseView.vue`
 
 **问题**: Wails 绑定函数调用失败时（如路径未设置），部分组件没有 try/catch 或错误状态 UI，直接静默失败。
 
-### 10. 🟡 前端: CSS 变量体系有冗余
+### 10. 🟡 前端: CSS 变量体系有冗余 — ✅ 已修
 
 **文件**: `App.vue`
 
 **问题**: `:root` 定义了 LYT 风格的变量，然后 `[data-theme="light"]` 和 `[data-theme="dark"]` 又定义了 UMM 原有变量名，通过"兼容别名层"映射。两套变量名增加了维护复杂度。
 
-### 11. 🟡 app_test.go: 测试覆盖不足
+### 11. 🟡 app_test.go: 测试覆盖不足 — ⚠️ 部分修（17→44 测试）
 
 **当前 17 个测试**，缺少以下关键功能的测试：
 - `ExtractMod()` 解包逻辑（目录展平、危险文件过滤）
@@ -110,25 +112,25 @@ return os.Rename(backupPath, target)     // 恢复旧版本
 
 ## 三、小问题（可选）
 
-### 12. ⚪ backup.go: `readModVersion` 路径假设
+### 12. ⚪ backup.go: `readModVersion` 路径假设 — ✅ 无需处理（找不到时返回 ""，不崩溃）
 
 **文件**: `internal/app/backup.go:124-131`
 
 只检查 `jsons/ModOptions.json`，不检查根目录的 `ModOptions.json`。部分模组（如纯图形模组）可能没有 `jsons/` 目录。
 
-### 13. ⚪ extractor.go: 无文件覆盖保护
+### 13. ⚪ extractor.go: 无文件覆盖保护 — ⚪ 设计如此（模组更新需覆盖）
 
 **文件**: `internal/app/extractor.go:66-106`
 
 解包时直接 `os.Create(outPath)` 覆盖已有文件，不检查目标文件是否已存在。对于模组更新场景是期望行为，但可能导致意外覆盖。
 
-### 14. ⚪ 前端: ToolboxView 的拖拽手柄未清理 mousemove 监听
+### 14. ⚪ 前端: ToolboxView 的拖拽手柄未清理 mousemove 监听 — ❌ 待修
 
 **文件**: `frontend/src/components/ToolboxView.vue`
 
 `startCatDrag` 注册了 `mousemove`/`mouseup` 事件，但如果用户在拖拽过程中切换页面，`mousemove` 监听可能残留。
 
-### 15. ⚪ app.go: UMMVersion 硬编码为 "1.0.0"
+### 15. ⚪ app.go: UMMVersion 硬编码 — ⚠️ 值已更新（1.0.0→1.4.0），但仍硬编码
 
 **文件**: `internal/app/app.go:13`
 
@@ -275,7 +277,7 @@ tag 已打 v1.1，但代码中 `UMMVersion = "1.0.0"` 未同步更新。
 
 ## 九、项目整体评估
 
-**整体健康度: 7.8 / 10**
+**整体健康度: 8.5 / 10**（↑7.8）
 
 **优势**:
 - 代码量精简（~3800 行），功能完整
@@ -283,9 +285,16 @@ tag 已打 v1.1，但代码中 `UMMVersion = "1.0.0"` 未同步更新。
 - 安全意识好（危险扩展名过滤、zip-slip 防护、路径遍历保护）
 - 镜像加速和断点续传实现可靠
 
-**最需要改进的 Top 5**:
-1. `backup.go` 的 `_backup_info.json` 残留到 mods/ 目录
-2. `backup.go` 的 `RestoreBackup()` 竞态条件
-3. 测试覆盖不足（仅 17 个测试，缺少备份/解包/冲突核心功能测试）
-4. `ToolboxView.vue` 组件过大（>800 行），应拆分
-5. `App.vue` 的 CSS 变量体系应简化，去掉兼容别名层
+**已修复**:
+1. ✅ `_backup_info.json` 残留 → 恢复后清理 + 启动时全量清理
+2. ✅ `RestoreBackup()` 竞态条件 → 改为先备份再恢复
+3. ✅ CSS 变量体系 → 53 行简化到 18 行
+4. ✅ 前端错误边界 → ModsView / SavesView / BrowseView 全部加 try/catch
+5. ✅ 镜像测速/去重/死代码 → 5 处重复 + 3 个死函数 + 多余包装清理
+6. ✅ `dirSize()` 性能 → `scanModDirectory()` 单次 Walk
+
+**仍存在的问题**:
+1. ❌ ToolboxView 拖拽监听在组件卸装时未清理
+2. ❌ speedSamples 切片无硬上限
+3. ⚠️ 测试覆盖（44 测试，仍缺 ExtractMod / ScanMods / BackupMod 核心路径）
+4. ⚠️ UMMVersion 仍硬编码

@@ -2,10 +2,11 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"io"
-	"crypto/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -49,6 +50,8 @@ type dlTask struct {
 
 	// speed tracking — 3 s sliding window
 	speedSamples []speedSample
+	// mirror failover - remaining mirrors to try on failure
+	mirrorCandidates []string
 }
 
 type speedSample struct {
@@ -56,25 +59,11 @@ type speedSample struct {
 	at    time.Time
 }
 
-// ── Mirror list ───────────────────────────────────────────────────────
-
-func getMirrors() []string {
-	return []string{
-		"https://ghproxy.com/",
-		"https://mirror.ghproxy.com/",
-		"https://gh.api.99988866.xyz/",
-		"https://ghfast.top/",
-		"https://kkgithub.com/",
-		"https://hub.nuaa.cf/",
-	}
-}
-
-// probeURL is a small well-known URL used to measure mirror latency.
-const probeURL = "https://raw.githubusercontent.com/yairm210/Unciv/master/README.md"
-
 // ── URL builder ───────────────────────────────────────────────────────
 
 // BuildDownloadURL transforms a raw URL through the configured proxy.
+// Delegates to applyMirror for the "mirror" mode to avoid URL-stripping
+// logic duplication.
 func (a *App) BuildDownloadURL(rawURL string, cfg ProxyConfig) string {
 	if !strings.HasPrefix(rawURL, "http") {
 		return rawURL
@@ -83,9 +72,7 @@ func (a *App) BuildDownloadURL(rawURL string, cfg ProxyConfig) string {
 	case "direct":
 		return rawURL
 	case "mirror":
-		clean := strings.TrimPrefix(rawURL, "https://")
-		clean = strings.TrimPrefix(clean, "http://")
-		return strings.TrimRight(cfg.MirrorURL, "/") + "/" + clean
+		return applyMirror(rawURL, "mirror", cfg.MirrorURL)
 	case "custom":
 		return cfg.CustomProxy + rawURL
 	default:
@@ -95,43 +82,13 @@ func (a *App) BuildDownloadURL(rawURL string, cfg ProxyConfig) string {
 
 // ── Latency test ──────────────────────────────────────────────────────
 
-// TestMirrorsLatency concurrently probes every mirror by fetching a small
-// known URL through it, returning latency in milliseconds.  Mirrors that
-// time out (>5 s) or return non-200 are omitted.
+// TestMirrorsLatency delegates to GetMirrorHealth for compatibility.
+// Deprecated: use GetMirrorHealth instead.
 func (a *App) TestMirrorsLatency() map[string]int64 {
-	mirrors := getMirrors()
-	type result struct {
-		url     string
-		latency int64
-	}
-	ch := make(chan result, len(mirrors))
-	var wg sync.WaitGroup
-
-	for _, m := range mirrors {
-		wg.Add(1)
-		go func(mirror string) {
-			defer wg.Done()
-			client := &http.Client{Timeout: 6 * time.Second}
-			// Build full probe URL through mirror
-			testURL := strings.TrimRight(mirror, "/") + "/" + probeURL
-			start := time.Now()
-			resp, err := client.Head(testURL)
-			if err != nil {
-				return
-			}
-			resp.Body.Close()
-			if resp.StatusCode != http.StatusOK {
-				return
-			}
-			ch <- result{mirror, time.Since(start).Milliseconds()}
-		}(m)
-	}
-	wg.Wait()
-	close(ch)
-
-	out := map[string]int64{}
-	for r := range ch {
-		out[r.url] = r.latency
+	health := a.GetMirrorHealth()
+	out := make(map[string]int64, len(health))
+	for _, m := range health {
+		out[m.URL] = m.Latency
 	}
 	return out
 }
@@ -150,15 +107,44 @@ func (a *App) initDownloads() {
 }
 
 // StartDownloadWithMirror builds a proxied URL and starts the download.
-// If mirror is empty or "direct", the raw URL is used unchanged.
+// If mirror is "auto" or empty, all healthy mirrors are tried in order
+// with a direct fallback. If a specific mirror is given, it is tried first
+// then the rest as fallbacks.
 func (a *App) StartDownloadWithMirror(rawURL, filename, mirror string) (string, error) {
-	dlURL := rawURL
-	if mirror != "" && mirror != "direct" {
-		clean := strings.TrimPrefix(rawURL, "https://")
-		clean = strings.TrimPrefix(clean, "http://")
-		dlURL = strings.TrimRight(mirror, "/") + "/" + clean
+	var candidates []string
+	switch {
+	case mirror == "" || mirror == "direct":
+		// direct only
+		candidates = []string{rawURL}
+	case mirror == "auto":
+		// all mirrors + direct fallback
+		for _, m := range a.getAllMirrors() {
+			candidates = append(candidates, mirrorURL(rawURL, m))
+		}
+		candidates = append(candidates, rawURL)
+	default:
+		// specific mirror first, then the rest, then direct
+		chosen := mirrorURL(rawURL, mirror)
+		candidates = append(candidates, chosen)
+		for _, m := range a.getAllMirrors() {
+			u := mirrorURL(rawURL, m)
+			if u != chosen {
+				candidates = append(candidates, u)
+			}
+		}
+		candidates = append(candidates, rawURL)
 	}
-	return a.StartDownload(dlURL, filename)
+
+	// Start the first candidate; store the rest for failover
+	id, err := a.StartDownload(candidates[0], filename)
+	if err == nil {
+		a.dlMu.Lock()
+		if t, ok := a.dlTasks[id]; ok {
+			t.mirrorCandidates = candidates[1:]
+		}
+		a.dlMu.Unlock()
+	}
+	return id, err
 }
 
 // ValidateDownloadURL checks a URL for obvious dangers before download.
@@ -179,12 +165,16 @@ func (a *App) ValidateDownloadURL(rawURL string) (warning string, err error) {
 		return "", fmt.Errorf("仅支持 HTTPS 链接，安全起见不接受明文 HTTP")
 	}
 
-	// Known safe domains (no warning)
+	// Known safe domains — GitHub infrastructure + all configured mirrors
 	safeDomains := []string{
 		"github.com/", "raw.githubusercontent.com/",
 		"objects.githubusercontent.com/", "codeload.github.com/",
-		"ghproxy.com/", "mirror.ghproxy.com/", "gh.api.99988866.xyz/",
-		"ghfast.top/", "kkgithub.com/", "hub.nuaa.cf/",
+	}
+	for _, m := range a.getAllMirrors() {
+		u, err := url.Parse(m)
+		if err == nil && u.Host != "" {
+			safeDomains = append(safeDomains, u.Host+"/")
+		}
 	}
 	for _, d := range safeDomains {
 		if strings.Contains(lower, d) {
@@ -377,16 +367,26 @@ func (a *App) GetDownloadList() []DownloadTask {
 func (a *App) runDownload(t *dlTask) {
 	defer RecoverLog("download")
 
-	// 1. HEAD to get total size + range support
 	client := &http.Client{Timeout: 30 * time.Second}
+
+retryHead:
+	// 1. HEAD to get total size + range support
 	resp, err := client.Head(t.URL)
 	if err != nil {
+		if t.tryNextMirror() {
+			LogWarn("下载", "镜像切换重试: id=%s new_url=%s", t.ID, t.URL)
+			t.ctx, t.cancel = context.WithCancel(context.Background())
+			goto retryHead
+		}
 		a.failTask(t, "无法连接: "+err.Error())
 		return
 	}
-	resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
+		if t.tryNextMirror() {
+			LogWarn("下载", "镜像切换重试（状态码%d）: id=%s new_url=%s", resp.StatusCode, t.ID, t.URL)
+			t.ctx, t.cancel = context.WithCancel(context.Background())
+			goto retryHead
+		}
 		a.failTask(t, fmt.Sprintf("服务器返回 %d，请检查 URL 是否为直链（GitHub 需用 archive/...zip 格式）", resp.StatusCode))
 		return
 	}
@@ -394,6 +394,11 @@ func (a *App) runDownload(t *dlTask) {
 	// Reject non-binary responses (e.g. HTML pages served as zip)
 	ct := resp.Header.Get("Content-Type")
 	if strings.Contains(ct, "text/html") {
+		if t.tryNextMirror() {
+			LogWarn("下载", "镜像切换重试（返回HTML）: id=%s new_url=%s", t.ID, t.URL)
+			t.ctx, t.cancel = context.WithCancel(context.Background())
+			goto retryHead
+		}
 		a.failTask(t, "URL 返回的是网页而非文件，请使用直链（如 .../archive/...zip）")
 		return
 	}
@@ -430,7 +435,7 @@ func (a *App) runDownload(t *dlTask) {
 
 	// 4. Check outcome
 	t.mu.Lock()
-	finished := t.Status == "downloading" // not cancelled/failed mid-way
+	finished := t.Status == "downloading"
 	if finished {
 		LogInfo("下载", "完成: id=%s filename=%s", t.ID, t.Filename)
 		t.Status = "completed"
@@ -440,17 +445,39 @@ func (a *App) runDownload(t *dlTask) {
 		t.file.Close()
 		t.file = nil
 	}
+	failed := t.Status == "failed"
 	t.mu.Unlock()
 
 	if finished {
-		LogInfo("下载", "完成: id=%s filename=%s", t.ID, t.Filename)
 		runtime.EventsEmit(a.ctx, "download:complete", map[string]interface{}{
 			"id":       t.ID,
 			"filename": t.Filename,
 			"filePath": t.filePath,
 		})
-	}
 		a.startNextQueued()
+		return
+	}
+
+	// 5. Download failed — try next mirror if available
+	if failed && t.tryNextMirror() {
+		LogWarn("下载", "镜像切换重试: id=%s new_url=%s", t.ID, t.URL)
+		// Cancel any remaining chunks and clean up
+		t.mu.Lock()
+		t.cancel()
+		t.Status = "downloading"
+		t.Downloaded = 0
+		t.Percent = 0
+		t.Error = ""
+		t.mu.Unlock()
+		if filePath != "" {
+			os.Remove(filePath)
+		}
+		// Reset context for the retry
+		t.ctx, t.cancel = context.WithCancel(context.Background())
+		goto retryHead
+	}
+
+	a.startNextQueued()
 }
 
 // ── Concurrent chunked download ──────────────────────────────────────
@@ -620,6 +647,19 @@ func (a *App) failTask(t *dlTask, msg string) {
 		"id":    t.ID,
 		"error": msg,
 	})
+}
+
+// tryNextMirror advances to the next mirror candidate.
+// Returns true if a candidate was found and t.URL was updated.
+func (t *dlTask) tryNextMirror() bool {
+	if len(t.mirrorCandidates) == 0 {
+		return false
+	}
+	next := t.mirrorCandidates[0]
+	t.mirrorCandidates = t.mirrorCandidates[1:]
+	t.URL = next
+	LogWarn("下载", "切换镜像: %s", next)
+	return true
 }
 
 func (a *App) emitProgress(t *dlTask) {

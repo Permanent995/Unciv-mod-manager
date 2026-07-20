@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,6 +45,8 @@ func ParseOwnerRepo(url string) (owner, repo string, err error) {
 }
 
 // FetchReleases fetches the releases list for a GitHub repo via a mirror.
+// FetchReleases fetches the releases list for a GitHub repo.
+// Tries direct first, then falls back through all configured mirrors.
 func (a *App) FetchReleases(githubURL string) ([]GHRelease, error) {
 	owner, repo, err := ParseOwnerRepo(githubURL)
 	if err != nil {
@@ -52,17 +55,19 @@ func (a *App) FetchReleases(githubURL string) ([]GHRelease, error) {
 
 	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=20", owner, repo)
 
-	// Try direct first, then mirror
+	// Try direct first
 	releases, err := a.fetchReleasesFrom(apiURL)
-	if err != nil {
-		// Fallback via mirror
-		mirrorURL := "https://ghproxy.com/" + apiURL
-		releases, err = a.fetchReleasesFrom(mirrorURL)
-		if err != nil {
-			return nil, fmt.Errorf("无法获取 Releases 列表（直连和镜像均失败）: %w", err)
+	if err == nil {
+		return releases, nil
+	}
+	// Fallback via mirrors
+	for _, m := range a.getAllMirrors() {
+		releases, err = a.fetchReleasesFrom(mirrorURL(apiURL, m))
+		if err == nil {
+			return releases, nil
 		}
 	}
-	return releases, nil
+	return nil, fmt.Errorf("无法获取 Releases 列表（直连和镜像均失败）: %w", err)
 }
 
 func (a *App) fetchReleasesFrom(apiURL string) ([]GHRelease, error) {
@@ -217,16 +222,20 @@ func (a *App) searchOnlineModsAPI(query string) ([]OnlineMod, error) {
 	a.searchMu.Unlock()
 
 	apiURL := fmt.Sprintf("https://api.github.com/search/repositories?q=%s&sort=stars&order=desc&per_page=100",
-		urlEncode(q))
+		url.QueryEscape(q))
 
 	result, err := a.ghRequest(apiURL)
 	if err != nil {
-		// Fallback via mirror
-		mirrorURL := "https://ghproxy.com/" + apiURL
-		result, err = a.ghRequest(mirrorURL)
-		if err != nil {
-			return nil, err
+		// Fallback via mirrors
+		for _, m := range a.getAllMirrors() {
+			result, err = a.ghRequest(mirrorURL(apiURL, m))
+			if err == nil {
+				break
+			}
 		}
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	var mods []OnlineMod
@@ -323,15 +332,16 @@ func (a *App) FetchReadme(owner, repo string) (string, error) {
 		err  error
 		body string
 	}
-	ch := make(chan attempt, 5)
-
-	urls := []string{
-		fmt.Sprintf("https://ghproxy.com/https://raw.githubusercontent.com/%s/%s/main/README.md", owner, repo),
-		fmt.Sprintf("https://mirror.ghproxy.com/https://raw.githubusercontent.com/%s/%s/main/README.md", owner, repo),
-		fmt.Sprintf("https://gh.api.99988866.xyz/https://raw.githubusercontent.com/%s/%s/main/README.md", owner, repo),
-		fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/main/README.md", owner, repo),
-		fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/master/README.md", owner, repo),
+	baseRawURL := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/main/README.md", owner, repo)
+	urls := []string{baseRawURL}
+	for _, m := range a.getAllMirrors() {
+		urls = append(urls, mirrorURL(baseRawURL, m))
 	}
+	// Also try master branch for older repos
+	urls = append(urls, fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/master/README.md", owner, repo))
+
+	ch := make(chan attempt, len(urls))
+
 
 	client := &http.Client{Timeout: 8 * time.Second}
 	for _, u := range urls {
@@ -379,18 +389,3 @@ func (a *App) FetchReadme(owner, repo string) (string, error) {
 	return "该仓库没有 README.md", nil
 }
 
-func urlEncode(s string) string {
-	// Simple URL encoding for GitHub search query
-	s = strings.ReplaceAll(s, " ", "%20")
-	s = strings.ReplaceAll(s, ":", "%3A")
-	return s
-}
-
-func applyMirror(rawURL, mode, mirror string) string {
-	if mode == "" || mode == "direct" {
-		return rawURL
-	}
-	clean := strings.TrimPrefix(rawURL, "https://")
-	clean = strings.TrimPrefix(clean, "http://")
-	return strings.TrimRight(mirror, "/") + "/" + clean
-}

@@ -1,11 +1,16 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { SearchOnlineMods, FetchReadme } from '../../wailsjs/go/app/App'
+import { SearchOnlineMods, FetchReadme, FetchReleases, StartDownloadWithMirror, GetAppConfig } from '../../wailsjs/go/app/App'
 import { TranslateText } from '../../wailsjs/go/app/App'
 
 type OnlineMod = {
   name: string; owner: string; repo: string; description: string
   stars: number; updatedAt: string; topics: string[]; htmlUrl: string
+}
+
+type Release = {
+  tag_name: string; name: string; published_at: string
+  zipball_url: string; assets: { name: string; size: number; browser_download_url: string }[]
 }
 
 const browseQuery = ref('')
@@ -14,13 +19,19 @@ const browsing = ref(false)
 const browseErr = ref('')
 const browseCat = ref('all')
 const sortMode = ref<'stars' | 'name' | 'updated'>('stars')
-const loadedMods = ref(false) // track if we've loaded at least once
+const loadedMods = ref(false)
 
 const detail = ref<OnlineMod | null>(null)
 const detailReadme = ref('')
 const detailLoading = ref(false)
 const detailTranslating = ref(false)
 const detailTranslated = ref('')
+
+// Release state
+const detailReleases = ref<Release[]>([])
+const loadingReleases = ref(false)
+const releasesError = ref('')
+const downloadingRelease = ref('')
 
 const catLabels: Record<string, string> = {
   all: '全部',
@@ -43,7 +54,6 @@ const browseCats = computed(() => {
 
 const filteredMods = computed(() => {
   let list = onlineMods.value
-  // Filter by category
   if (browseCat.value !== 'all') {
     list = list.filter(m => {
       for (const t of m.topics || []) {
@@ -52,7 +62,6 @@ const filteredMods = computed(() => {
       return browseCat.value === 'other' && !(m.topics || []).some(t => catLabels[t.replace('unciv-mod-', '')])
     })
   }
-  // Sort
   const sorted = [...list]
   if (sortMode.value === 'stars') sorted.sort((a, b) => b.stars - a.stars)
   else if (sortMode.value === 'name') sorted.sort((a, b) => (a.repo || '').localeCompare(b.repo || ''))
@@ -71,6 +80,8 @@ async function openOnlineMod(m: OnlineMod) {
   detail.value = m
   detailReadme.value = ''
   detailTranslated.value = ''
+  detailReleases.value = []
+  releasesError.value = ''
 }
 
 async function loadReadme() {
@@ -80,6 +91,42 @@ async function loadReadme() {
   try { detailReadme.value = await FetchReadme(detail.value.owner, detail.value.repo) }
   catch { detailReadme.value = '无法加载 README' }
   finally { detailLoading.value = false }
+}
+
+async function loadReleases() {
+  if (!detail.value) return
+  loadingReleases.value = true
+  releasesError.value = ''
+  detailReleases.value = []
+  try { detailReleases.value = await FetchReleases(detail.value.htmlUrl) }
+  catch (e: any) { releasesError.value = '获取版本失败: ' + e }
+  finally { loadingReleases.value = false }
+}
+
+async function downloadRelease(rel: Release) {
+  if (!detail.value) return
+  downloadingRelease.value = rel.tag_name
+  try {
+    const cfg = await GetAppConfig()
+    // Build download URL: prefer asset .zip, fallback to archive URL
+    let dlUrl = ''
+    let fname = rel.tag_name + '.zip'
+    for (const a of rel.assets || []) {
+      if (a.name.toLowerCase().endsWith('.zip')) {
+        dlUrl = a.browser_download_url
+        fname = a.name
+        break
+      }
+    }
+    if (!dlUrl) {
+      dlUrl = `https://github.com/${detail.value.owner}/${detail.value.repo}/archive/refs/tags/${rel.tag_name}.zip`
+    }
+    // Use mirror from config, default to auto
+    const mirror = cfg.mirrorMode === 'auto' ? 'auto' : (cfg.selectedMirror || 'auto')
+    await StartDownloadWithMirror(dlUrl, fname, mirror)
+    browseErr.value = `已添加下载: ${fname}`
+  } catch (e: any) { browseErr.value = '下载失败: ' + e }
+  finally { downloadingRelease.value = '' }
 }
 
 async function translateDetail() {
@@ -92,7 +139,16 @@ async function translateDetail() {
 }
 
 function closeDetail() { detail.value = null }
-function formatStars(n: number): string { return n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n) }
+
+function formatStars(n: number): string {
+  return n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n)
+}
+
+function formatSize(bytes: number): string {
+  if (!bytes || bytes <= 0) return '?'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB'
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+}
 </script>
 
 <template>
@@ -127,20 +183,59 @@ function formatStars(n: number): string { return n >= 1000 ? (n / 1000).toFixed(
         <button class="back-btn" @click="closeDetail">← 返回列表</button>
         <h2>{{ detail.repo }}</h2>
         <div class="detail-meta">
-          <span>by {{ detail.owner }}</span><span>⭐ {{ formatStars(detail.stars) }}</span>
+          <span>by {{ detail.owner }}</span>
+          <span>⭐ {{ formatStars(detail.stars) }}</span>
           <span>{{ (detail.updatedAt || '').slice(0, 10) }}</span>
         </div>
+
+        <!-- Repo link -->
+        <a class="detail-link" :href="detail.htmlUrl" target="_blank" rel="noopener">
+          🌐 {{ detail.htmlUrl }}
+        </a>
+
         <div v-if="detail.description" class="detail-desc">{{ detail.description }}</div>
-        <div v-if="!detailReadme && !detailLoading" style="margin-bottom:12px">
-          <button class="btn-go outline" @click="loadReadme">📖 查看 README</button>
+
+        <!-- Releases section -->
+        <div class="detail-section">
+          <div class="detail-section-hdr">
+            <h3>📦 版本</h3>
+            <button v-if="!detailReleases.length && !loadingReleases" class="btn-go outline sm" @click="loadReleases">
+              {{ loadingReleases ? '加载中...' : '查看版本' }}
+            </button>
+          </div>
+          <div v-if="loadingReleases" class="loading-sm">加载中...</div>
+          <div v-if="releasesError" class="error-sm">{{ releasesError }}</div>
+          <div v-if="detailReleases.length > 0" class="release-list">
+            <div v-for="rel in detailReleases" :key="rel.tag_name" class="release-item">
+              <div class="rel-left">
+                <span class="rel-tag">{{ rel.tag_name }}</span>
+                <span v-if="rel.name && rel.name !== rel.tag_name" class="rel-name">{{ rel.name }}</span>
+                <span class="rel-date">{{ (rel.published_at || '').slice(0, 10) }}</span>
+              </div>
+              <button
+                class="btn-go xs"
+                :disabled="downloadingRelease === rel.tag_name"
+                @click="downloadRelease(rel)">
+                {{ downloadingRelease === rel.tag_name ? '下载中...' : '下载' }}
+              </button>
+            </div>
+          </div>
+          <div v-else-if="!loadingReleases && !releasesError && detailReleases.length === 0" class="hint-text">
+            点击「查看版本」获取发布列表
+          </div>
+        </div>
+
+        <!-- README -->
+        <div v-if="!detailReadme && !detailLoading" class="detail-section">
+          <button class="btn-go outline sm" @click="loadReadme">📖 查看 README</button>
         </div>
         <div class="detail-readme" v-if="detailReadme || detailLoading">
           <h3>📖 README</h3>
           <div v-if="detailLoading" class="loading-sm">加载中...</div>
           <pre v-else class="readme-text">{{ detailReadme }}</pre>
         </div>
-        <div v-if="detailReadme">
-          <button class="btn-go outline" :disabled="detailTranslating" @click="translateDetail">
+        <div v-if="detailReadme" class="detail-section">
+          <button class="btn-go outline sm" :disabled="detailTranslating" @click="translateDetail">
             {{ detailTranslating ? '翻译中...' : '🌐 翻译 README' }}
           </button>
         </div>
@@ -176,7 +271,9 @@ function formatStars(n: number): string { return n >= 1000 ? (n / 1000).toFixed(
 .add-bar input { flex: 1; padding: 8px 12px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 14px; }
 .btn-go { padding: 8px 16px; background: var(--accent); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; white-space: nowrap; }
 .btn-go:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-go.outline { background: transparent; border: 1px solid var(--accent); color: var(--accent); margin-top: 10px; }
+.btn-go.outline { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
+.btn-go.outline.sm { padding: 5px 12px; font-size: 12px; }
+.btn-go.xs { padding: 3px 10px; font-size: 11px; }
 .error-toast { background: rgba(255,107,107,0.1); color: var(--danger); padding: 10px 14px; border-radius: 4px; margin-bottom: 10px; font-size: 13px; }
 .loading { text-align: center; padding: 40px; color: var(--text-muted); }
 .placeholder { text-align: center; padding: 60px; color: var(--text-muted); }
@@ -199,11 +296,24 @@ function formatStars(n: number): string { return n >= 1000 ? (n / 1000).toFixed(
 .browse-detail { flex: 1; overflow-y: auto; padding: 0 0 0 12px; }
 .back-btn { padding: 4px 12px; background: transparent; border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-secondary); cursor: pointer; font-size: 12px; margin-bottom: 10px; }
 .browse-detail h2 { font-size: 20px; margin-bottom: 6px; color: var(--text-primary); }
-.detail-meta { display: flex; gap: 16px; font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
+.detail-meta { display: flex; gap: 16px; font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
+.detail-link { display: block; font-size: 12px; color: var(--accent); margin-bottom: 8px; word-break: break-all; text-decoration: none; }
+.detail-link:hover { text-decoration: underline; }
 .detail-desc { font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; }
+.detail-section { margin-bottom: 12px; }
+.detail-section-hdr { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.detail-section-hdr h3 { font-size: 14px; color: var(--text-secondary); margin: 0; }
+.hint-text { font-size: 12px; color: var(--text-muted); }
+.loading-sm { font-size: 12px; color: var(--text-muted); padding: 10px 0; }
+.error-sm { font-size: 12px; color: var(--danger); padding: 4px 0; }
+.release-list { display: flex; flex-direction: column; gap: 4px; }
+.release-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: var(--bg-secondary); border-radius: 4px; }
+.rel-left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rel-tag { font-family: monospace; font-size: 12px; font-weight: 600; background: var(--accent); color: #fff; padding: 2px 6px; border-radius: 3px; }
+.rel-name { font-size: 12px; color: var(--text-secondary); }
+.rel-date { font-size: 11px; color: var(--text-muted); }
 .detail-readme { margin-bottom: 14px; }
 .detail-readme h3 { font-size: 14px; margin-bottom: 6px; color: var(--text-secondary); }
-.loading-sm { font-size: 12px; color: var(--text-muted); padding: 20px; }
 .readme-text { background: #1a1a24; border: 1px solid #333; border-radius: 6px; padding: 14px; font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; color: #d4d4d4; }
 
 .browse-grid { flex: 1; overflow-y: auto; padding: 0 0 0 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; align-content: start; }

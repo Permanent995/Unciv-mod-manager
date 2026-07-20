@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	UMMVersion = "1.4.0"
+	UMMVersion = "1.8.0"
 	UMMRepo    = "Permanent995/unciv-mod-manager" // TODO: 替换为实际仓库
 )
 type ModInfo struct {
@@ -98,6 +98,9 @@ type AppConfig struct {
 	MPServer              string   `json:"mpServer"`
 	MPUID                 string   `json:"mpUid"`
 	MPPassword            string   `json:"mpPassword"`
+		CustomMirrors         []string `json:"customMirrors"`
+		MirrorMode            string   `json:"mirrorMode"`
+		SelectedMirror        string   `json:"selectedMirror"`
 }
 
 type App struct {
@@ -153,6 +156,12 @@ func (a *App) initConfig() {
 	}
 	if a.config.TranslateProvider == "" {
 		a.config.TranslateProvider = "microsoft"
+	}
+	if a.config.MirrorMode == "" {
+		a.config.MirrorMode = "auto"
+	}
+	if a.config.CustomMirrors == nil {
+		a.config.CustomMirrors = []string{}
 	}
 }
 

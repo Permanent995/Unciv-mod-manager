@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import {
   StartDownloadWithMirror, PauseDownload, ResumeDownload, CancelDownload,
-  GetDownloadList, ExtractMod, CleanupTempFile, GetAppConfig, TestMirrorsLatency,
+  GetDownloadList, ExtractMod, CleanupTempFile, GetAppConfig, GetMirrorHealth,
   RemoveDownload, RetryDownload, ImportFile, BackupMod,
 } from '../../wailsjs/go/app/App'
 import { FetchReleases } from '../../wailsjs/go/app/App'
@@ -30,10 +30,16 @@ const msg = ref('')
 const mirrors = ref<Mirror[]>([])
 const selectedMirror = ref('direct')
 const testingMirrors = ref(false)
+const mirrorMode = ref('auto')
 let unsubProgress: (() => void) | null = null
 let unsubComplete: (() => void) | null = null
 
 onMounted(async () => {
+  const cfg = await GetAppConfig()
+  mirrorMode.value = cfg.mirrorMode || 'auto'
+  if (mirrorMode.value === 'manual' && cfg.selectedMirror) {
+    selectedMirror.value = cfg.selectedMirror
+  }
   tasks.value = await GetDownloadList()
   testMirrors()
   unsubProgress = EventsOn('download:progress', (data: any) => {
@@ -56,9 +62,11 @@ onUnmounted(() => { unsubProgress?.(); unsubComplete?.() })
 async function testMirrors() {
   testingMirrors.value = true
   try {
-    const lat = await TestMirrorsLatency()
+    const health = await GetMirrorHealth()
     const list: Mirror[] = [{ url: 'direct', latency: 0, label: '直连' }]
-    for (const [url, ms] of Object.entries(lat)) list.push({ url, latency: Number(ms), label: new URL(url).hostname })
+    for (const m of health) {
+      if (m.alive) list.push({ url: m.url, latency: m.latency, label: m.label })
+    }
     list.sort((a, b) => a.url === 'direct' ? 1 : b.url === 'direct' ? -1 : (a.latency || 9999) - (b.latency || 9999))
     mirrors.value = list
     const fastest = list.find(m => m.url !== 'direct' && m.latency > 0)
@@ -162,7 +170,8 @@ function formatSize(bytes: number): string {
     <div class="mirror-bar">
       <span class="mirror-label">线路：</span>
       <span v-if="testingMirrors" class="mirror-testing">⏳ 测速中...</span>
-      <select v-else v-model="selectedMirror" class="mirror-select"><option v-for="m in mirrors" :key="m.url" :value="m.url">{{ mirrorLabel(m) }}</option></select>
+      <span v-else-if="mirrorMode === 'auto'" class="mirror-auto">自动（故障切换）</span>
+      <select v-else-if="mirrorMode !== 'auto'" v-model="selectedMirror" class="mirror-select"><option v-for="m in mirrors" :key="m.url" :value="m.url">{{ mirrorLabel(m) }}</option></select>
       <button class="btn-retest" @click="testMirrors" :disabled="testingMirrors">🔄</button>
     </div>
 
@@ -222,6 +231,7 @@ function formatSize(bytes: number): string {
 .view-header h1 { font-size: 24px; font-weight: 600; margin-bottom: 12px; }
 .mirror-bar { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; font-size: 13px; }
 .mirror-label { color: var(--text-muted); }
+.mirror-auto { color: var(--success); font-weight: 600; font-size: 13px; }
 .mirror-testing { color: var(--warning); }
 .mirror-select { padding: 4px 8px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 13px; min-width: 200px; }
 .btn-retest { padding: 4px 6px; background: transparent; border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-muted); cursor: pointer; font-size: 12px; }

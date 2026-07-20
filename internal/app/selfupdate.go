@@ -42,12 +42,17 @@ func (a *App) CheckSelfUpdate() (SelfUpdateInfo, error) {
 
 	err := fetchJSON(apiURL, &release)
 	if err != nil {
-		if strings.Contains(err.Error(), "404") {
-			info.LatestVersion = UMMVersion
-			return info, nil
+		// Try mirrors
+		for _, m := range a.getAllMirrors() {
+			err = fetchJSON(mirrorURL(apiURL, m), &release)
+			if err == nil {
+				break
+			}
+			if strings.Contains(err.Error(), "404") {
+				info.LatestVersion = UMMVersion
+				return info, nil
+			}
 		}
-		mirrorURL := "https://ghproxy.com/" + apiURL
-		err = fetchJSON(mirrorURL, &release)
 		if err != nil {
 			if strings.Contains(err.Error(), "404") {
 				info.LatestVersion = UMMVersion
