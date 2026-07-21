@@ -5,6 +5,8 @@ import {
   ListSaveArchives, RestoreSaveArchive, DeleteSaveArchive
 } from '../../wailsjs/go/app/App'
 import { app } from '../../wailsjs/go/models'
+import IconArchive from './icons/IconArchive.vue'
+import IconTrash from './icons/IconTrash.vue'
 
 const saves = ref<app.SaveInfo[]>([])
 const loading = ref(false)
@@ -138,9 +140,9 @@ function formatSize(n: number): string {
 </script>
 
 <template>
-  <div class="saves-view">
+  <div class="saves-view view-card">
     <div class="view-header">
-      <h1>💾 存档</h1>
+      <h1><IconArchive :size="24" /> 存档</h1>
       <button class="btn-refresh" :disabled="loading" @click="loadSaves">
         {{ loading ? '加载中...' : '刷新' }}
       </button>
@@ -192,10 +194,10 @@ function formatSize(n: number): string {
 
           <div class="actions">
             <button class="btn btn-danger" :disabled="deleting" @click="deleteSelectedSave">
-              {{ deleting ? '删除中...' : '🗑 删除存档' }}
+              <IconTrash :size="16" /> {{ deleting ? '删除中...' : '删除存档' }}
             </button>
             <button class="btn btn-archive" :disabled="archiving" @click="archiveSelectedSave">
-              {{ archiving ? '备份中...' : '📦 备份存档' }}
+              <IconArchive :size="16" /> {{ archiving ? '备份中...' : '备份存档' }}
             </button>
           </div>
 
@@ -235,7 +237,7 @@ function formatSize(n: number): string {
 .saves-view { height: 100%; display: flex; flex-direction: column; }
 
 .view-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-shrink: 0; }
-.view-header h1 { font-size: 22px; font-weight: 700; }
+.view-header h1 { font-size: 22px; font-weight: 700; color: var(--text-primary); }
 .btn-refresh { padding: 6px 14px; background: var(--accent); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
 .btn-refresh:disabled { opacity: 0.5; }
 
@@ -272,15 +274,15 @@ function formatSize(n: number): string {
 .mod-tag { padding: 2px 8px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; font-weight: 600; }
 
 .actions { display: flex; gap: 8px; margin-bottom: 12px; }
-.btn { padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600; border: 1px solid var(--danger); color: var(--danger); background: transparent; }
+.btn { padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600; border: 1px solid var(--danger); color: var(--danger); background: transparent; display: inline-flex; align-items: center; gap: 4px; }
 .btn:hover { background: rgba(239,68,68,0.08); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.btn-archive { border-color: var(--accent); color: var(--accent); }
+.btn-archive { border-color: var(--accent); color: var(--accent); display: inline-flex; align-items: center; gap: 4px; }
 .btn-archive:hover { background: rgba(79,70,229,0.08); }
 
 .archive-section { margin-bottom: 12px; font-size: 13px; }
-.archive-section summary { cursor: pointer; color: var(--text-secondary); margin-bottom: 6px; font-weight: 600; padding: 4px 0; }
+.archive-section summary { cursor: pointer; color: var(--text-primary); margin-bottom: 6px; font-weight: 600; padding: 4px 0; }
 .archive-section summary:hover { color: var(--text-primary); }
 .archive-empty { color: var(--text-muted); font-size: 12px; padding: 8px 0; }
 .loading-sm { font-size: 12px; color: var(--text-muted); padding: 8px 0; }

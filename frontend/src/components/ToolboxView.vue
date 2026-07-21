@@ -1,17 +1,17 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { AnalyzeConflicts } from '../../wailsjs/go/app/App'
-import { ReadCrashReport } from '../../wailsjs/go/app/App'
-import { DiagnoseMods } from '../../wailsjs/go/app/App'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { AnalyzeConflicts, ReadCrashReport, DiagnoseMods, StartDownloadWithMirror, GetDownloadList, PauseDownload, ResumeDownload, CancelDownload, RetryDownload, RemoveDownload, SelectDownloadDirectory, SaveDownloadedFile } from '../../wailsjs/go/app/App'
+import { EventsOn } from '../../wailsjs/runtime/runtime'
 import { app } from '../../wailsjs/go/models'
 
 type ConflictReport = app.ConflictReport
 type DiagIssue = { mod: string; severity: string; message: string; detail: string }
 
+// ── Conflict / Crash / Diagnose state ──
 const reports = ref<ConflictReport[]>([])
 const loading = ref(false)
 const error = ref('')
-const activeTab = ref<'conflict' | 'crash' | 'diagnose'>('conflict')
+const activeTab = ref<'conflict' | 'crash' | 'diagnose' | 'download'>('conflict')
 
 const activeLevel = ref('override')
 const activeCat = ref('building')
@@ -128,10 +128,100 @@ function startCatDrag(e: MouseEvent, key: 'cat' | 'diag') {
   document.addEventListener('mousemove', onMove)
   document.addEventListener('mouseup', onUp)
 }
+
+// ── Custom Download ──
+const customUrl = ref('')
+const customFilename = ref('')
+const customUrlError = ref('')
+const customMsg = ref('')
+const downloadBusy = ref(false)
+const savePath = ref('')
+
+const dlTasks = ref<app.DownloadTask[]>([])
+type DlMeta = { id: string; filePath: string; savedTo: string }
+const dlMeta = ref<DlMeta[]>([])
+let unsubDlProg: (() => void) | null = null
+let unsubDlDone: (() => void) | null = null
+
+const dlDownloading = computed(() => dlTasks.value.filter(t => t.status === 'downloading' || t.status === 'queued'))
+const dlPaused = computed(() => dlTasks.value.filter(t => t.status === 'paused'))
+const dlCompleted = computed(() => dlTasks.value.filter(t => t.status === 'completed'))
+const dlFailed = computed(() => dlTasks.value.filter(t => t.status === 'failed'))
+
+function extractFilename(url: string): string {
+  try { return url.split('/').filter(Boolean).pop() || 'download' }
+  catch { return 'download' }
+}
+function formatSize(n: number): string {
+  if (!n || n <= 0) return '?'
+  if (n < 1024 * 1024) return (n / 1024).toFixed(0) + ' KB'
+  return (n / (1024 * 1024)).toFixed(1) + ' MB'
+}
+
+onMounted(async () => {
+  try { dlTasks.value = await GetDownloadList() } catch { /* ignore */ }
+  unsubDlProg = EventsOn('download:progress', (d: any) => {
+    const idx = dlTasks.value.findIndex(t => t.id === d.id)
+    if (idx >= 0) dlTasks.value[idx] = { ...dlTasks.value[idx], ...d }
+    else dlTasks.value.push(d as app.DownloadTask)
+  })
+  unsubDlDone = EventsOn('download:complete', async (d: any) => {
+    customMsg.value = `✅ 下载完成: ${d.filename}`
+    dlMeta.value.push({ id: d.id, filePath: d.filePath, savedTo: '' })
+    dlTasks.value = await GetDownloadList()
+    // Auto-save to user's directory if set
+    if (savePath.value && d.filePath) {
+      try {
+        const dest = await SaveDownloadedFile(d.filePath, savePath.value)
+        if (dest) {
+          const m = dlMeta.value.find(x => x.id === d.id)
+          if (m) m.savedTo = dest
+          customMsg.value = `✅ 已保存到: ${dest}`
+        }
+      } catch { /* user can save manually */ }
+    }
+    setTimeout(() => { if (customMsg.value?.startsWith('✅')) customMsg.value = '' }, 8000)
+  })
+})
+onUnmounted(() => { unsubDlProg?.(); unsubDlDone?.() })
+
+function onUrlInput() { if (!customFilename.value) customFilename.value = extractFilename(customUrl.value) }
+
+async function pickSavePath() {
+  try {
+    const dir = await SelectDownloadDirectory()
+    if (dir) savePath.value = dir
+  } catch { /* ignore */ }
+}
+
+async function startDownload() {
+  const url = customUrl.value.trim()
+  if (!url) { customUrlError.value = '请输入下载链接'; return }
+  if (!url.startsWith('http')) { customUrlError.value = '请输入有效的 HTTP/HTTPS 链接'; return }
+  downloadBusy.value = true; customUrlError.value = ''
+  const name = customFilename.value.trim() || extractFilename(url)
+  try {
+    await StartDownloadWithMirror(url, name, 'auto')
+    dlTasks.value = await GetDownloadList()
+    customMsg.value = `已添加: ${name}`
+  } catch (e: any) { customUrlError.value = '启动失败: ' + e }
+  finally { downloadBusy.value = false }
+}
+
+async function doPause(id: string) { await PauseDownload(id); dlTasks.value = await GetDownloadList() }
+async function doResume(id: string) { await ResumeDownload(id); dlTasks.value = await GetDownloadList() }
+async function doCancel(id: string) { await CancelDownload(id); dlTasks.value = await GetDownloadList() }
+async function doRetry(id: string) { await RetryDownload(id); dlTasks.value = await GetDownloadList() }
+async function doRemove(id: string) { await RemoveDownload(id); dlTasks.value = await GetDownloadList() }
+async function doClearDone() {
+  for (const t of dlCompleted.value) await RemoveDownload(t.id)
+  dlTasks.value = await GetDownloadList()
+}
+function getSavedTo(id: string) { return dlMeta.value.find(m => m.id === id)?.savedTo || '' }
 </script>
 
 <template>
-  <div class="toolbox-view">
+  <div class="toolbox-view view-card">
     <div class="view-header">
       <h1>🧰 工具箱</h1>
       <p class="subtitle">冲突检测 · 兼容性分析 · 崩溃报告</p>
@@ -142,6 +232,7 @@ function startCatDrag(e: MouseEvent, key: 'cat' | 'diag') {
       <button class="tab-btn" :class="{ active: activeTab === 'conflict' }" @click="activeTab = 'conflict'">📋 冲突检测</button>
       <button class="tab-btn" :class="{ active: activeTab === 'diagnose' }" @click="activeTab = 'diagnose'">🔬 模组诊断</button>
       <button class="tab-btn" :class="{ active: activeTab === 'crash' }" @click="activeTab = 'crash'; loadCrash()">💥 崩溃报告</button>
+      <button class="tab-btn" :class="{ active: activeTab === 'download' }" @click="activeTab = 'download'">📥 自定义下载</button>
     </div>
 
     <!-- ══ Conflict Analysis ══ -->
@@ -292,6 +383,75 @@ function startCatDrag(e: MouseEvent, key: 'cat' | 'diag') {
       </div>
       <div v-else-if="diagIssues.length === 0 && diagDone && !diagLoading && !loading" class="empty-state" style="margin-top:20px"><p>✅ 所有模组通过自检，无内部问题</p></div>
     </div>
+
+    <!-- ══ Custom Download ══ -->
+    <div v-show="activeTab === 'download'" class="tool-section">
+      <div class="section-header"><h2>📥 自定义下载</h2></div>
+
+      <!-- Save path bar (PCL-style) -->
+      <div class="save-path-bar">
+        <span class="save-path-icon">📁</span>
+        <span class="save-path-text">{{ savePath || '未设置保存路径（将下载到临时目录）' }}</span>
+        <button class="btn-browse" @click="pickSavePath" title="选择保存目录">…</button>
+      </div>
+
+      <!-- URL input row -->
+      <div class="dl-bar">
+        <input v-model="customUrl" placeholder="https://example.com/file.zip" class="dl-input" @input="onUrlInput" @keyup.enter="startDownload" />
+        <input v-model="customFilename" placeholder="文件名" class="dl-name" />
+        <button class="btn-analysis" :disabled="downloadBusy || !customUrl.trim()" @click="startDownload">{{ downloadBusy ? '添加中…' : '下载' }}</button>
+      </div>
+
+      <!-- Notifications -->
+      <div v-if="customUrlError" class="error-banner">{{ customUrlError }}</div>
+      <div v-if="customMsg" class="dl-toast">{{ customMsg }}</div>
+
+      <!-- Task list -->
+      <div v-if="dlTasks.length === 0" class="empty-state"><p>输入文件链接并点击「下载」开始</p></div>
+      <div v-else class="dl-queue">
+
+        <!-- Downloading -->
+        <div v-if="dlDownloading.length" class="dl-section">
+          <h3>下载中 ({{ dlDownloading.length }})</h3>
+          <div v-for="t in dlDownloading" :key="t.id" class="dl-task" :class="t.status === 'queued' ? 'queued' : 'active'">
+            <div class="dl-info"><span class="dl-name">{{ t.filename }}</span><span class="dl-meta">{{ t.status === 'queued' ? '⏳ 排队中' : formatSize(t.downloaded)+' / '+formatSize(t.totalSize)+' · '+(t.speed||'…')+' · '+(t.percent||0).toFixed(0)+'%' }}</span></div>
+            <div class="progress-bar"><div class="fill" :class="{ paused: t.status === 'queued' }" :style="{ width: Math.max(t.percent||0, 2)+'%' }"></div></div>
+            <div class="dl-actions"><button class="btn-sm" v-if="t.status==='downloading'" @click="doPause(t.id)">暂停</button><button class="btn-sm danger" @click="doCancel(t.id)">取消</button></div>
+          </div>
+        </div>
+
+        <!-- Paused -->
+        <div v-if="dlPaused.length" class="dl-section">
+          <h3>已暂停 ({{ dlPaused.length }})</h3>
+          <div v-for="t in dlPaused" :key="t.id" class="dl-task">
+            <div class="dl-info"><span class="dl-name">{{ t.filename }}</span><span class="dl-meta">{{ formatSize(t.downloaded) }} / {{ formatSize(t.totalSize) }}</span></div>
+            <div class="progress-bar"><div class="fill paused" :style="{ width: Math.max(t.percent||0, 2)+'%' }"></div></div>
+            <div class="dl-actions"><button class="btn-sm" @click="doResume(t.id)">继续</button><button class="btn-sm danger" @click="doCancel(t.id)">取消</button></div>
+          </div>
+        </div>
+
+        <!-- Completed -->
+        <div v-if="dlCompleted.length" class="dl-section">
+          <div class="dl-section-hdr"><h3>已完成</h3><button class="btn-sm danger" @click="doClearDone">清空</button></div>
+          <div v-for="t in dlCompleted" :key="t.id" class="dl-task done">
+            <div class="dl-done-info">
+              <span class="dl-name">{{ t.filename }}</span>
+              <span v-if="getSavedTo(t.id)" class="dl-saved-path">📁 {{ getSavedTo(t.id) }}</span>
+              <span v-else class="dl-saved-temp">📁 临时目录</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Failed -->
+        <div v-if="dlFailed.length" class="dl-section">
+          <h3>失败 ({{ dlFailed.length }})</h3>
+          <div v-for="t in dlFailed" :key="t.id" class="dl-task failed">
+            <div class="dl-info"><span class="dl-name">{{ t.filename }}</span><span class="dl-err">{{ t.error }}</span></div>
+            <div class="dl-actions"><button class="btn-sm" @click="doRetry(t.id)">重试</button><button class="btn-sm danger" @click="doRemove(t.id)">删除</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -316,7 +476,7 @@ function startCatDrag(e: MouseEvent, key: 'cat' | 'diag') {
 .sug-text { font-size: 13px; color: var(--text-primary); }
 .raw-details { margin-top: 8px; }
 .raw-details summary { font-size: 13px; color: var(--text-muted); cursor: pointer; }
-.raw-stack { background: #1a1a24; border: 1px solid #333; border-radius: 4px; padding: 12px; font-size: 11px; line-height: 1.5; max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-all; margin-top: 8px; color: #d4d4d4; font-family: 'Cascadia Code', 'Fira Code', monospace; }
+.raw-stack { background: var(--code-bg); border: 1px solid var(--code-border); border-radius: 4px; padding: 12px; font-size: 11px; line-height: 1.5; max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-all; margin-top: 8px; color: var(--code-text); font-family: 'Cascadia Code', 'Fira Code', monospace; }
 
 .diag-list { display: flex; flex-direction: column; gap: 6px; }
 .diag-item { padding: 10px 12px; border-radius: 4px; border-left: 3px solid #555; background: var(--bg-card); }
@@ -326,7 +486,7 @@ function startCatDrag(e: MouseEvent, key: 'cat' | 'diag') {
 .diag-msg { font-size: 13px; color: var(--text-primary); }
 .diag-detail { font-size: 11px; color: var(--text-muted); display: block; margin-top: 2px; }
 .view-header { margin-bottom: 20px; }
-.view-header h1 { font-size: 24px; font-weight: 600; margin-bottom: 4px; }
+.view-header h1 { font-size: 24px; font-weight: 600; margin-bottom: 4px; color: var(--text-primary); }
 .subtitle { color: var(--text-muted); font-size: 14px; }
 .tool-section { background: var(--bg-card); border-radius: 8px; padding: 16px; box-shadow: var(--card-shadow); }
 .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
@@ -372,4 +532,37 @@ function startCatDrag(e: MouseEvent, key: 'cat' | 'diag') {
 .tag.b { background: #b44eff; color: #fff; }
 .vs { color: var(--text-secondary); font-size: 12px; }
 .entry-detail { margin-top: 3px; font-size: 13px; color: var(--text-primary); padding: 4px 8px; background: var(--bg-card); border-radius: 3px; }
+
+/* ── Custom Download ── */
+.save-path-bar { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; padding: 8px 10px; background: var(--bg-card); border-radius: 4px; font-size: 13px; border: 1px solid var(--border-color); }
+.save-path-icon { font-size: 16px; }
+.save-path-text { flex: 1; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.btn-browse { padding: 2px 12px; background: var(--bg-hover); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: 700; color: var(--text-primary); line-height: 1.4; }
+.btn-browse:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.dl-bar { display: flex; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.dl-input { flex: 1; padding: 8px 12px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 14px; min-width: 200px; }
+.dl-input:focus { border-color: var(--accent); }
+.dl-name { width: 150px; padding: 8px 12px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 14px; }
+.dl-name:focus { border-color: var(--accent); }
+.dl-toast { background: rgba(78,205,196,0.1); color: #4ecdc4; padding: 8px 12px; border-radius: 4px; margin-bottom: 8px; font-size: 13px; }
+.dl-queue { margin-top: 10px; }
+.dl-section { margin-bottom: 12px; }
+.dl-section h3 { font-size: 13px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+.dl-section-hdr { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.dl-task { background: var(--bg-card); border-radius: 6px; padding: 10px; margin-bottom: 4px; box-shadow: var(--card-shadow); }
+.dl-task.active { border-left: 3px solid var(--accent); }
+.dl-task.queued { border-left: 3px solid var(--warning); opacity: 0.7; }
+.dl-task.done { display: flex; align-items: center; }
+.dl-task.failed { border-left: 3px solid var(--danger); }
+.dl-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.dl-name { font-size: 14px; font-weight: 500; }
+.dl-meta { font-size: 12px; color: var(--text-secondary); }
+.dl-err { color: var(--danger); font-size: 12px; }
+.dl-actions { display: flex; gap: 6px; }
+.dl-done-info { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.dl-saved-path { font-size: 12px; color: var(--success); }
+.dl-saved-temp { font-size: 12px; color: var(--text-muted); }
+.progress-bar { height: 4px; background: var(--bg-secondary); border-radius: 2px; margin-bottom: 6px; overflow: hidden; }
+.fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s; min-width: 2%; }
+.fill.paused { background: var(--warning); }
 </style>

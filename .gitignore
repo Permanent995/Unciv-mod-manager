@@ -10,6 +10,9 @@ thumbs.db
 # Dev docs source (local copy, repo copy is in docs/)
 Desktop/log/
 
+# Claude project files (config, memory, worktrees)
+.claude/
+
 # Build artifacts
 build/bin/*.exe
 build/bin/log/

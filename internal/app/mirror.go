@@ -28,12 +28,17 @@ const probeTimeout = 6 * time.Second
 // defaultMirrors returns the built-in mirror list.
 func defaultMirrors() []string {
 	return []string{
-		"https://ghproxy.com/",
-		"https://mirror.ghproxy.com/",
-		"https://gh.api.99988866.xyz/",
-		"https://ghfast.top/",
-		"https://kkgithub.com/",
-		"https://hub.nuaa.cf/",
+		// ghproxy-style (prefix proxy)
+		"https://ghfast.top/",           // ✅ 确认可用
+		"https://ghp.ci/",               // Cloudflare 加速，推荐
+		"https://ghproxy.net/",          // ghproxy 同类
+		"https://moeyy.cn/gh-proxy/",    // 功能全面
+		"https://github.akams.cn/",      // 支持 Release、Raw、Clone
+		// clone-style (full GitHub mirror)
+		"https://kkgithub.com/",         // GitHub 克隆站
+		"https://bgithub.xyz/",          // 响应快
+		"https://hub.fastgit.org/",      // 经典镜像
+		"https://gitclone.com/",         // 附带 git clone 加速
 	}
 }
 
@@ -110,7 +115,7 @@ func (a *App) GetMirrorHealth() []MirrorInfo {
 			defer wg.Done()
 			client := &http.Client{Timeout: probeTimeout}
 			start := time.Now()
-			resp, err := client.Head(mirrorURL + strings.TrimPrefix(probeURL, "https://"))
+			resp, err := client.Head(buildMirrorURL(probeURL, mirrorURL))
 			elapsed := time.Since(start).Milliseconds()
 
 			r := MirrorInfo{
@@ -149,7 +154,7 @@ func (a *App) GetMirrorHealth() []MirrorInfo {
 func (a *App) TestSingleMirror(mirrorURL string) int64 {
 	client := &http.Client{Timeout: probeTimeout}
 	start := time.Now()
-	resp, err := client.Head(mirrorURL + strings.TrimPrefix(probeURL, "https://"))
+	resp, err := client.Head(buildMirrorURL(probeURL, mirrorURL))
 	if err != nil {
 		return -1
 	}
@@ -165,17 +170,51 @@ func (a *App) TestSingleMirror(mirrorURL string) int64 {
 // probeURL is a small well-known URL used to measure mirror latency.
 const probeURL = "https://raw.githubusercontent.com/yairm210/Unciv/master/README.md"
 
-// mirrorURL builds a proxied URL by prepending the mirror base to the
-// raw URL's host+path.
-func mirrorURL(rawURL, mirror string) string {
+// isCloneMirror detects whether the mirror is a full GitHub clone (e.g. kkgithub.com)
+// rather than a reverse-proxy / ghproxy-style mirror.
+func isCloneMirror(mirror string) bool {
+	mirror = strings.ToLower(mirror)
+	return strings.Contains(mirror, "kkgithub") ||
+		strings.Contains(mirror, "bgithub") ||
+		strings.Contains(mirror, "fastgit") ||
+		strings.Contains(mirror, "gitclone")
+}
+
+// buildMirrorURL constructs a proxied URL appropriate for the mirror's type.
+//
+//   - ghproxy-style (default): prepend the mirror base to the host+path.
+//     Example: https://ghproxy.com/ + github.com/user/repo → https://ghproxy.com/github.com/user/repo
+//
+//   - clone-style (kkgithub, nuaa.cf): replace the github.com domain with the
+//     mirror's own domain.
+//     Example: https://github.com/user/repo → https://kkgithub.com/user/repo
+func buildMirrorURL(rawURL, mirror string) string {
+	mirror = strings.TrimRight(mirror, "/")
+	if isCloneMirror(mirror) {
+		u, err := url.Parse(mirror)
+		if err == nil {
+			r := strings.Replace(rawURL, "github.com", u.Host, 1)
+			r = strings.Replace(r, "raw.githubusercontent.com", "raw."+u.Host, 1)
+			if r != rawURL {
+				return r
+			}
+		}
+	}
+	// ghproxy-style: prepend mirror to the path portion
 	clean := strings.TrimPrefix(rawURL, "https://")
 	clean = strings.TrimPrefix(clean, "http://")
-	return strings.TrimRight(mirror, "/") + "/" + clean
+	return mirror + "/" + clean
+}
+
+// mirrorURL builds a proxied URL by prepending the mirror base to the
+// raw URL's host+path.  Delegates to buildMirrorURL for type-aware dispatch.
+func mirrorURL(rawURL, mirror string) string {
+	return buildMirrorURL(rawURL, mirror)
 }
 
 // applyMirror transforms rawURL according to the given mode and mirror.
 // mode "direct" or "" → returns rawURL unchanged.
-// mode "mirror"       → prepends the mirror base.
+// mode "mirror"       → uses buildMirrorURL (type-aware).
 // mode "custom"       → returns mirror + rawURL (full proxy).
 // This is the canonical implementation; kept for backward compatibility
 // with existing callers (BuildDownloadURL) and tests.
@@ -183,9 +222,7 @@ func applyMirror(rawURL, mode, mirror string) string {
 	if mode == "" || mode == "direct" {
 		return rawURL
 	}
-	clean := strings.TrimPrefix(rawURL, "https://")
-	clean = strings.TrimPrefix(clean, "http://")
-	return strings.TrimRight(mirror, "/") + "/" + clean
+	return buildMirrorURL(rawURL, mirror)
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────

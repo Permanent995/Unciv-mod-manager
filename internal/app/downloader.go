@@ -709,3 +709,33 @@ func genTaskID() string {
 	rand.Read(b)
 	return fmt.Sprintf("dl_%x", b)
 }
+
+// SelectDownloadDirectory opens a folder picker and returns the chosen path.
+func (a *App) SelectDownloadDirectory() (string, error) {
+	path, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "选择下载保存目录",
+	})
+	if err != nil {
+		return "", err
+	}
+	return path, nil // empty if cancelled
+}
+
+// SaveDownloadedFile copies a temp file to the user-chosen directory, keeping the original filename.
+func (a *App) SaveDownloadedFile(srcPath, destDir string) (string, error) {
+	if srcPath == "" {
+		return "", fmt.Errorf("源文件路径为空")
+	}
+	if _, err := os.Stat(srcPath); err != nil {
+		return "", fmt.Errorf("源文件不存在: %w", err)
+	}
+	if _, err := os.Stat(destDir); err != nil {
+		return "", fmt.Errorf("目标目录不存在: %w", err)
+	}
+	filename := filepath.Base(srcPath)
+	dest := filepath.Join(destDir, filename)
+	if err := copyFile(srcPath, dest); err != nil {
+		return "", fmt.Errorf("保存文件失败: %w", err)
+	}
+	return dest, nil
+}

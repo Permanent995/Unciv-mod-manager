@@ -164,7 +164,7 @@ function formatSize(bytes: number): string {
 </script>
 
 <template>
-  <div class="downloads-view">
+  <div class="downloads-view view-card">
     <div class="view-header"><h1>⬇ 下载</h1></div>
 
     <div class="mirror-bar">
@@ -172,7 +172,7 @@ function formatSize(bytes: number): string {
       <span v-if="testingMirrors" class="mirror-testing">⏳ 测速中...</span>
       <span v-else-if="mirrorMode === 'auto'" class="mirror-auto">自动（故障切换）</span>
       <select v-else-if="mirrorMode !== 'auto'" v-model="selectedMirror" class="mirror-select"><option v-for="m in mirrors" :key="m.url" :value="m.url">{{ mirrorLabel(m) }}</option></select>
-      <button class="btn-retest" @click="testMirrors" :disabled="testingMirrors">🔄</button>
+      <button class="btn-retest" @click="testMirrors" :disabled="testingMirrors" title="重新测速" aria-label="重新测速">🔄</button>
     </div>
 
     <div class="add-bar">
@@ -228,7 +228,7 @@ function formatSize(bytes: number): string {
 
 <style scoped>
 .downloads-view { height: 100%; max-width: 800px; }
-.view-header h1 { font-size: 24px; font-weight: 600; margin-bottom: 12px; }
+.view-header h1 { font-size: 24px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary); }
 .mirror-bar { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; font-size: 13px; }
 .mirror-label { color: var(--text-muted); }
 .mirror-auto { color: var(--success); font-weight: 600; font-size: 13px; }

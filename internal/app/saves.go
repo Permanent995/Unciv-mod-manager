@@ -147,6 +147,9 @@ func (a *App) ListSaveArchives() ([]SaveArchive, error) {
 			ModifiedAt: fi.ModTime().Format("2006-01-02 15:04"),
 		})
 	}
+	if archives == nil {
+		archives = []SaveArchive{}
+	}
 	return archives, nil
 }
 

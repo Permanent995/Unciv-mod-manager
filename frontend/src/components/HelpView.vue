@@ -85,7 +85,7 @@ async function doExport() {
 </script>
 
 <template>
-  <div class="help-view">
+  <div class="help-view view-card">
     <div class="view-header">
       <h1>📖 帮助</h1>
     </div>
@@ -147,7 +147,7 @@ async function doExport() {
 <style scoped>
 .help-view { height: 100%; display: flex; flex-direction: column; }
 .view-header { margin-bottom: 20px; }
-.view-header h1 { font-size: 24px; font-weight: 700; }
+.view-header h1 { font-size: 24px; font-weight: 700; color: var(--text-primary); }
 
 .help-layout { display: flex; gap: 20px; flex: 1; overflow: hidden; }
 
@@ -207,7 +207,7 @@ async function doExport() {
   position: fixed; inset: 0;
   background: rgba(0,0,0,0.4);
   display: flex; align-items: center; justify-content: center;
-  z-index: 9999;
+  z-index: var(--z-modal);
 }
 .modal-dialog {
   background: var(--bg-primary);

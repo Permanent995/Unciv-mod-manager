@@ -80,13 +80,12 @@ function openURL(url: string) {
 </script>
 
 <template>
-  <div class="about-page">
+  <div class="about-page view-card">
     <section class="about-hero">
       <div class="about-logo-mark">
         <img src="../assets/icon.png" class="about-logo" />
       </div>
       <div class="about-hero-copy">
-        <div class="about-kicker">Unciv Mod Manager</div>
         <h2>Unciv Mod Manager</h2>
         <p>轻量、清爽的 Unciv 模组管理工具</p>
       </div>

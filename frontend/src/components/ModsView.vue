@@ -202,7 +202,7 @@ function catColor(c: string): string {
 </script>
 
 <template>
-  <div class="mods-view">
+  <div class="mods-view view-card">
     <div class="view-header">
       <h1>模组库</h1>
       <div class="header-right">
@@ -334,7 +334,7 @@ function catColor(c: string): string {
 <style scoped>
 .mods-view { height: 100%; display: flex; flex-direction: column; min-height: 0; }
 .view-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-shrink: 0; }
-.view-header h1 { font-size: 24px; font-weight: 600; }
+.view-header h1 { font-size: 24px; font-weight: 600; color: var(--text-primary); }
 .header-right { display: flex; align-items: center; gap: 12px; }
 
 .sort-bar { display: flex; gap: 2px; }
@@ -393,7 +393,7 @@ function catColor(c: string): string {
 .btn-del { padding: 6px 14px; background: rgba(255,77,79,0.1); color: var(--danger); border: 1px solid var(--danger); border-radius: 4px; cursor: pointer; font-size: 12px; }
 .btn-del:hover { background: rgba(255,77,79,0.2); }
 .backup-section { margin: 12px 0; font-size: 13px; }
-.backup-section summary { cursor: pointer; color: var(--text-secondary); margin-bottom: 6px; }
+.backup-section summary { cursor: pointer; color: var(--text-primary); margin-bottom: 6px; }
 .backup-empty { color: var(--text-muted); font-size: 12px; padding: 8px 0; }
 .backup-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: var(--bg-card); border-radius: 4px; margin-bottom: 4px; }
 .backup-info { display: flex; gap: 10px; align-items: center; }
@@ -406,13 +406,13 @@ function catColor(c: string): string {
 
 .readme-section { margin-top: 20px; }
 .readme-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.readme-header h3 { font-size: 15px; margin: 0; }
+.readme-header h3 { font-size: 15px; margin: 0; color: var(--text-primary); }
 .btn-trans { padding: 4px 12px; background: var(--accent); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
 .btn-trans:disabled { opacity: 0.5; cursor: not-allowed; }
 .translated-section { margin-top: 16px; }
-.translated-section h3 { font-size: 14px; margin-bottom: 8px; color: var(--text-secondary); }
+.translated-section h3 { font-size: 14px; margin-bottom: 8px; color: var(--text-primary); }
 .readme-loading { color: var(--text-muted); font-size: 13px; }
-.readme-text { background: #1a1a24; border: 1px solid #333; border-radius: 6px; padding: 14px; font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; color: #d4d4d4; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+.readme-text { background: var(--code-bg); border: 1px solid var(--code-border); border-radius: 6px; padding: 14px; font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; color: var(--code-text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
 
 .update-btn { padding: 6px 14px; background: var(--warning); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
 .update-btn:disabled { opacity: 0.6; cursor: not-allowed; }

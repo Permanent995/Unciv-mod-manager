@@ -75,7 +75,7 @@ function issueLabel(issue: string): string {
 </script>
 
 <template>
-  <div class="mp-view">
+  <div class="mp-view view-card">
     <div class="view-header"><h1>🔗 联机检查</h1></div>
     <p class="subtitle">确保联机双方 Unciv 版本和模组一致</p>
 
@@ -130,7 +130,7 @@ function issueLabel(issue: string): string {
 
 <style scoped>
 .mp-view { height: 100%; max-width: 700px; }
-.view-header h1 { font-size: 26px; font-weight: 700; margin-bottom: 6px; }
+.view-header h1 { font-size: 26px; font-weight: 700; margin-bottom: 6px; color: var(--text-primary); }
 .subtitle { color: var(--text-secondary); font-size: 15px; margin-bottom: 20px; }
 
 .config-section { background: var(--bg-card); border-radius: 8px; padding: 16px 20px; margin-bottom: 20px; box-shadow: var(--card-shadow); }

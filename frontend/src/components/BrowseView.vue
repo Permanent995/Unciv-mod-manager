@@ -152,7 +152,7 @@ function formatSize(bytes: number): string {
 </script>
 
 <template>
-  <div class="browse-view">
+  <div class="browse-view view-card">
     <div class="view-header"><h1>🔍 模组发现</h1></div>
 
     <div class="add-bar">
@@ -266,7 +266,7 @@ function formatSize(bytes: number): string {
 
 <style scoped>
 .browse-view { height: 100%; }
-.view-header h1 { font-size: 24px; font-weight: 600; margin-bottom: 12px; }
+.view-header h1 { font-size: 24px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary); }
 .add-bar { display: flex; gap: 8px; margin-bottom: 10px; }
 .add-bar input { flex: 1; padding: 8px 12px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 14px; }
 .btn-go { padding: 8px 16px; background: var(--accent); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; white-space: nowrap; }
@@ -287,7 +287,7 @@ function formatSize(bytes: number): string {
 
 .browse-body { display: flex; flex: 1; overflow: hidden; gap: 0; margin-top: 8px; height: calc(100% - 60px); }
 .browse-sidebar { width: 110px; flex-shrink: 0; overflow-y: auto; background: var(--bg-card); border-radius: 6px; }
-.bcat-item { display: flex; justify-content: space-between; padding: 8px 10px; cursor: pointer; font-size: 12px; color: var(--text-secondary); border-bottom: 1px solid var(--border-color); }
+.bcat-item { display: flex; justify-content: space-between; padding: 8px 10px; cursor: pointer; font-size: 12px; color: var(--text-primary); border-bottom: 1px solid var(--border-color); }
 .bcat-item:last-child { border-bottom: none; }
 .bcat-item:hover { background: var(--sidebar-active); color: var(--text-primary); }
 .bcat-item.active { background: var(--accent); color: #fff; }
@@ -302,7 +302,7 @@ function formatSize(bytes: number): string {
 .detail-desc { font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; }
 .detail-section { margin-bottom: 12px; }
 .detail-section-hdr { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.detail-section-hdr h3 { font-size: 14px; color: var(--text-secondary); margin: 0; }
+.detail-section-hdr h3 { font-size: 14px; color: var(--text-primary); margin: 0; }
 .hint-text { font-size: 12px; color: var(--text-muted); }
 .loading-sm { font-size: 12px; color: var(--text-muted); padding: 10px 0; }
 .error-sm { font-size: 12px; color: var(--danger); padding: 4px 0; }
@@ -313,8 +313,8 @@ function formatSize(bytes: number): string {
 .rel-name { font-size: 12px; color: var(--text-secondary); }
 .rel-date { font-size: 11px; color: var(--text-muted); }
 .detail-readme { margin-bottom: 14px; }
-.detail-readme h3 { font-size: 14px; margin-bottom: 6px; color: var(--text-secondary); }
-.readme-text { background: #1a1a24; border: 1px solid #333; border-radius: 6px; padding: 14px; font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; color: #d4d4d4; }
+.detail-readme h3 { font-size: 14px; margin-bottom: 6px; color: var(--text-primary); }
+.readme-text { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; padding: 14px; font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; color: var(--text-primary); }
 
 .browse-grid { flex: 1; overflow-y: auto; padding: 0 0 0 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; align-content: start; }
 .browse-card { background: var(--bg-card); border-radius: 8px; padding: 14px; cursor: pointer; transition: transform 0.15s; box-shadow: var(--card-shadow); border: 1px solid transparent; }

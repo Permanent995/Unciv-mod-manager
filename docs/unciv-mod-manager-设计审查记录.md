@@ -604,6 +604,106 @@ grep -roh 'var(--[a-z0-9_-]*' frontend/src/ | sort | uniq -c | sort -rn
 
 ---
 
+## Session 7 (2026-07-20) — 自定义下载 + 设置卡片化 + 存档 Bug 修复
+
+### 49. 工具箱新增「自定义下载」标签页（✅ 新增功能）
+
+**需求**：在工具箱加 PCL 风格的自定义文件下载工具，支持输入任意 URL 下载文件。
+
+**改动**：
+- `internal/app/downloader.go` 新增两个 Go 方法：
+  - `SelectDownloadDirectory()` — 调 Wails `OpenDirectoryDialog` 让用户选择保存目录
+  - `SaveDownloadedFile(srcPath, destDir)` — 将临时文件复制到用户指定目录
+- `frontend/ToolboxView.vue` 新增第 4 个 tab「📥 自定义下载」：
+  - **保存路径条**（PCL 风格）：`📁 D:\Downloads [...]`
+  - URL 输入框 + 文件名自动提取 + 下载按钮
+  - 下载任务列表：下载中（进度条）/ 暂停 / 已完成 / 失败
+  - 自动保存到用户设定目录
+- 复用现有 `StartDownloadWithMirror`、`GetDownloadList`、EventsOn 进度推送
+- 参考 PCL 开源源码（tangge233/PCL2、PCL-Community/PCL2-CE），确认百宝箱功能在开源版中为空桩
+
+### 50. 设置页面卡片式 UI 重构（✅ UI 改进）
+
+**问题**：设置页原为扁平列表式布局，各组设置之间视觉区分不足。
+
+**改动**：每项设置改为独立卡片：
+- 左侧图标 + 右侧内容区
+- 悬停阴影效果
+- 统一的 `.card` / `.card-title` / `.card-desc` 组件样式
+
+### 51. 存档列表 nil 切片崩溃修复（🔴 已修复）
+
+**问题**：`ListSaveArchives()` 在备份目录存在但为空时返回 `nil` 切片，JSON 序列化为 `null`，前端 `all.filter(...)` 抛 `TypeError: Cannot read properties of null`
+
+**修复**：`saves.go` 返回值前加 `if archives == nil` 检查，确保始终返回空数组而非 nil。
+
+---
+
+## Session 8 (2026-07-21) — UI 标题颜色统一 + 窗口拖拽修复尝试
+
+### 52. README 正文从代码块风格改为文档风格（✅ UI 改进）
+
+**问题**：`.readme-text` 使用 `var(--code-bg)`（深色底）+ `var(--code-text)`（浅灰字），在亮色模式下是黑底灰字，与页面其他文字风格不统一。
+
+**改动**：
+- `BrowseView.vue`: `.readme-text` 改为 `background: var(--bg-secondary); color: var(--text-primary); border: var(--border-color)`
+- 下同 ModsView 的 `.readme-text`
+
+### 53. 小标题统一从 `--text-secondary` 提升为 `--text-primary`（✅ UI 改进）
+
+**问题**：页面中各区域小标题（"📦 版本""📖 README""📝 中文翻译""📦 备份管理""📦 备份存档"等）使用 `--text-secondary`，偏淡，不够突出。
+
+**改动**（涉及 5 个文件）：
+
+| 文件 | 选择器 | 旧值 | 新值 |
+|------|--------|------|------|
+| BrowseView.vue | `.detail-section-hdr h3` | `--text-secondary` | `--text-primary` |
+| BrowseView.vue | `.detail-readme h3` | `--text-secondary` | `--text-primary` |
+| BrowseView.vue | `.bcat-item` | `--text-secondary` | `--text-primary` |
+| ModsView.vue | `.readme-header h3` | 无（继承body） | `var(--text-primary)`（显式） |
+| ModsView.vue | `.translated-section h3` | `--text-secondary` | `--text-primary` |
+| ModsView.vue | `.backup-section summary` | `--text-secondary` | `--text-primary` |
+| SavesView.vue | `.archive-section summary` | `--text-secondary` | `--text-primary` |
+
+### 54. `.view-header h1` 全部显式声明颜色（✅ 代码规范化）
+
+**问题**：8 个视图的 `h1` 标题（如"模组库"）没有显式设置 `color`，依赖从 `body` 继承 `--text-primary`，属于隐式硬编码。
+
+**改动**：在 8 个文件的 `.view-header h1` 规则中统一添加 `color: var(--text-primary)`：
+- BrowseView.vue、DownloadsView.vue、HelpView.vue、MapsView.vue、MultiplayerView.vue、SavesView.vue、SettingsView.vue（已有）、ToolboxView.vue
+
+ModsView.vue 已在 #53 中一并处理。
+
+### 55. 无边框窗口拖拽修复尝试（🟡 待验证）
+
+**问题**：`Frameless: true` 后窗口无法拖动。标题栏 CSS 设了 `--wails-draggable: drag` 但无效。
+
+**排查过程**：
+
+| 版本 | 方案 | 结果 |
+|------|------|------|
+| 原始 | `body { --wails-draggable: no-drag }` + `.title-bar { --wails-draggable: drag }` | ❌ 拖不动 |
+| 第1次 | 去掉 body 的 no-drag，只保留 title-bar 的 drag | ❌ 拖不动 |
+| 第2次 | 改为 `.app-root { drag }` + `.app-body { no-drag }` | ❌ 拖不动 |
+| 第3次 | 改用 `data-wails-drag` HTML 属性（Wails 社区方案） | ❌ 更糟，连边框拖动都没了 |
+| 第4次 | 去掉 `data-wails-drag`，仅留 `.title-bar { --wails-draggable: drag }` | ❌ 待测试 |
+
+**参考**：Wails 官方示例使用 `data-wails-drag` 属性而非 CSS 变量。当前代码使用 `--wails-draggable: drag` CSS 变量（Wails v2.13.0），两种方案均未验证通过。
+
+**当前状态**：仅 `.title-bar` 保留 `--wails-draggable: drag`，其余地方无拖拽相关代码。
+
+### 56. 用户自定义亮色主题色（✅ 用户配置）
+
+用户在 App.vue 中调整了亮色模式色值：
+- `--bg-sidebar`: `#b9d6f3` → `#c4d2e1`
+- `--bg-card`: `#c2dbf4`
+- `--text-muted`: `#7a8ba8` → `#a4b1c7`
+- `--code-text`: `#d4d4d4` → `#eedfdf`
+
+暗色模式同时调整为浅灰色系（`--bg-primary: #c9cdd7` 等），营造类似"褪色"效果。
+
+---
+
 ## 十、参考文档
 
 - LYT VPK 源码：`c:\Users\drj13\Desktop\ak\lytvpk-2.5.4\`

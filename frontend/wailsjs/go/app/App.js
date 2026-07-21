@@ -222,6 +222,10 @@ export function SaveClipboardMap(arg1, arg2) {
   return window['go']['app']['App']['SaveClipboardMap'](arg1, arg2);
 }
 
+export function SaveDownloadedFile(arg1, arg2) {
+  return window['go']['app']['App']['SaveDownloadedFile'](arg1, arg2);
+}
+
 export function ScanMaps() {
   return window['go']['app']['App']['ScanMaps']();
 }
@@ -236,6 +240,10 @@ export function ScanSaves() {
 
 export function SearchOnlineMods(arg1) {
   return window['go']['app']['App']['SearchOnlineMods'](arg1);
+}
+
+export function SelectDownloadDirectory() {
+  return window['go']['app']['App']['SelectDownloadDirectory']();
 }
 
 export function SelectUncivDir() {

@@ -112,6 +112,8 @@ export function SaveAppConfig(arg1:app.AppConfig):Promise<void>;
 
 export function SaveClipboardMap(arg1:string,arg2:string):Promise<string>;
 
+export function SaveDownloadedFile(arg1:string,arg2:string):Promise<string>;
+
 export function ScanMaps():Promise<Array<app.MapInfo>>;
 
 export function ScanMods():Promise<Array<app.ModInfo>>;
@@ -119,6 +121,8 @@ export function ScanMods():Promise<Array<app.ModInfo>>;
 export function ScanSaves():Promise<Array<app.SaveInfo>>;
 
 export function SearchOnlineMods(arg1:string):Promise<Array<app.OnlineMod>>;
+
+export function SelectDownloadDirectory():Promise<string>;
 
 export function SelectUncivDir():Promise<string>;
 

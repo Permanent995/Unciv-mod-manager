@@ -135,7 +135,7 @@ function sourceLabel(s: string): string {
 </script>
 
 <template>
-  <div class="maps-view" @dragenter.prevent="dropActive = true" @dragleave.prevent="dropActive = false" @drop.prevent="dropActive = false">
+  <div class="maps-view view-card" @dragenter.prevent="dropActive = true" @dragleave.prevent="dropActive = false" @drop.prevent="dropActive = false">
     <div class="view-header">
       <h1>🗺️ 地图</h1>
       <div class="header-right">
@@ -166,8 +166,8 @@ function sourceLabel(s: string): string {
           </div>
         </div>
         <div v-if="m.source === 'maps'" class="map-actions">
-          <button class="btn-icon" @click="renameMap(m)" title="重命名">✏️</button>
-          <button class="btn-icon del" :disabled="deleting === m.path" @click="deleteMap(m)" title="删除">🗑</button>
+          <button class="btn-icon" @click="renameMap(m)" title="重命名" aria-label="重命名">✏️</button>
+          <button class="btn-icon del" :disabled="deleting === m.path" @click="deleteMap(m)" title="删除" aria-label="删除">🗑</button>
         </div>
       </div>
     </div>
@@ -203,7 +203,7 @@ function sourceLabel(s: string): string {
 .maps-view::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
 .view-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-shrink: 0; }
-.view-header h1 { font-size: 24px; font-weight: 600; }
+.view-header h1 { font-size: 24px; font-weight: 600; color: var(--text-primary); }
 .header-right { display: flex; gap: 8px; }
 .btn-refresh { padding: 8px 16px; background: var(--accent); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
 .btn-paste { padding: 8px 14px; background: var(--bg-card); color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; font-size: 13px; }
@@ -242,7 +242,7 @@ function sourceLabel(s: string): string {
   position: fixed; inset: 0;
   background: rgba(0,0,0,0.4);
   display: flex; align-items: center; justify-content: center;
-  z-index: 9999;
+  z-index: var(--z-modal);
 }
 .modal-dialog {
   background: var(--bg-primary);
@@ -270,6 +270,7 @@ function sourceLabel(s: string): string {
   margin-bottom: 16px;
 }
 .modal-input:focus { border-color: var(--accent); }
+.modal-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .modal-buttons {
   display: flex; justify-content: flex-end; gap: 8px;
 }

@@ -1,6 +1,17 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { LaunchUnciv, IsUncivRunning, GetUncivVersion } from '../../wailsjs/go/app/App'
+import IconBox from './icons/IconBox.vue'
+import IconMap from './icons/IconMap.vue'
+import IconArchive from './icons/IconArchive.vue'
+import IconLink from './icons/IconLink.vue'
+import IconDownload from './icons/IconDownload.vue'
+import IconSearch from './icons/IconSearch.vue'
+import IconWrench from './icons/IconWrench.vue'
+import IconBook from './icons/IconBook.vue'
+import IconCog from './icons/IconCog.vue'
+import IconInfo from './icons/IconInfo.vue'
+import IconPlay from './icons/IconPlay.vue'
 
 const props = defineProps<{
   currentView: string
@@ -13,17 +24,30 @@ const emit = defineEmits<{
   (e: 'resize', width: number): void
 }>()
 
+const iconMap: Record<string, any> = {
+  mods: IconBox,
+  maps: IconMap,
+  saves: IconArchive,
+  multiplayer: IconLink,
+  downloads: IconDownload,
+  browse: IconSearch,
+  toolbox: IconWrench,
+  help: IconBook,
+  settings: IconCog,
+  about: IconInfo,
+}
+
 const menuItems = [
-  { id: 'mods', label: '模组库', icon: '📦' },
-  { id: 'maps', label: '地图', icon: '🗺️' },
-  { id: 'saves', label: '存档', icon: '💾' },
-  { id: 'multiplayer', label: '联机检查', icon: '🔗' },
-  { id: 'downloads', label: '下载', icon: '⬇️' },
-  { id: 'browse', label: '模组发现', icon: '🔍' },
-  { id: 'toolbox', label: '工具箱', icon: '🧰' },
-  { id: 'help', label: '帮助', icon: '📖' },
-  { id: 'settings', label: '设置', icon: '⚙️' },
-  { id: 'about', label: '关于', icon: 'ℹ️' },
+  { id: 'mods', label: '模组库', icon: 'mods' },
+  { id: 'maps', label: '地图', icon: 'maps' },
+  { id: 'saves', label: '存档', icon: 'saves' },
+  { id: 'multiplayer', label: '联机检查', icon: 'multiplayer' },
+  { id: 'downloads', label: '下载', icon: 'downloads' },
+  { id: 'browse', label: '模组发现', icon: 'browse' },
+  { id: 'toolbox', label: '工具箱', icon: 'toolbox' },
+  { id: 'help', label: '帮助', icon: 'help' },
+  { id: 'settings', label: '设置', icon: 'settings' },
+  { id: 'about', label: '关于', icon: 'about' },
 ]
 
 const launching = ref(false)
@@ -87,35 +111,35 @@ function startDrag(e: MouseEvent) {
         v-show="!(hiddenNav || []).includes(item.id)"
         class="nav-item" :class="{ active: currentView === item.id }"
         @click="selectView(item.id)">
-        <span class="nav-icon">{{ item.icon }}</span>
+        <span class="nav-icon"><component :is="iconMap[item.icon]" :size="20" /></span>
         <span class="nav-label">{{ item.label }}</span>
       </div>
     </nav>
     <div class="sidebar-footer">
       <button class="launch-btn" :disabled="launching" @click="launchUnciv">
-        {{ launching ? '启动中...' : '▶ 启动 Unciv' }}
+        <IconPlay :size="16" /> {{ launching ? '启动中...' : '启动 Unciv' }}
       </button>
-      <div v-if="gameVersion" class="game-version">🕹️ Unciv {{ gameVersion }}</div>
+      <div v-if="gameVersion" class="game-version">Unciv {{ gameVersion }}</div>
     </div>
     <div class="drag-handle" @mousedown="startDrag" :class="{ active: dragging }"></div>
   </div>
 </template>
 
 <style scoped>
-.sidebar { position: relative; background: var(--bg-sidebar); color: var(--text-primary); display: flex; flex-direction: column; height: 100%; flex-shrink: 0; overflow: hidden; --wails-draggable: no-drag; }
+.sidebar { position: relative; background: var(--bg-sidebar); color: var(--text-primary); display: flex; flex-direction: column; height: 100%; flex-shrink: 0; overflow: hidden; }
 .sidebar-header { padding: 20px; border-bottom: 1px solid var(--border-color); }
 .sidebar-header h2 { margin: 0; font-size: 18px; font-weight: 600; }
 .sidebar-nav { flex: 1; padding: 10px 0; overflow-y: auto; }
 .nav-item { display: flex; align-items: center; padding: 12px 20px; cursor: pointer; transition: background 0.2s; }
-.nav-item:hover { background: var(--border-color); }
+.nav-item:hover { background: var(--bg-hover); }
 .nav-item.active { background: var(--sidebar-active); border-left: 3px solid var(--accent); }
 .nav-icon { font-size: 20px; margin-right: 12px; }
 .nav-label { font-size: 14px; }
 .sidebar-footer { padding: 20px; border-top: 1px solid var(--border-color); }
-.launch-btn { width: 100%; padding: 10px; background: var(--accent); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 600; }
+.launch-btn { width: 100%; padding: 10px; background: var(--accent); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; justify-content: center; }
 .launch-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .launch-btn:hover:not(:disabled) { background: var(--accent-hover); }
-.game-version { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 8px; white-space: nowrap; }
+.game-version { text-align: center; font-size: 12px; color: var(--text-secondary); margin-top: 8px; white-space: nowrap; }
 .drag-handle { position: absolute; top: 0; right: 0; width: 4px; height: 100%; cursor: col-resize; background: transparent; z-index: 10; }
 .drag-handle:hover, .drag-handle.active { background: var(--accent); }
 </style>
