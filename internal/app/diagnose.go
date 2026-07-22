@@ -28,6 +28,13 @@ func (a *App) DiagnoseMods() ([]DiagIssue, error) {
 		return nil, fmt.Errorf("未设置 Unciv 路径")
 	}
 
+	if len(mods) == 0 {
+		return []DiagIssue{{
+			Severity: "info",
+			Message:  "未找到任何模组，请先安装模组或检查 Unciv 路径是否正确",
+		}}, nil
+	}
+
 	// ── Per-mod Checks ──
 	for _, mod := range mods {
 		dir := filepath.Join(uncivPath, "mods", mod.Folder, "jsons")

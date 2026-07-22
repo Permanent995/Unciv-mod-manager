@@ -355,7 +355,11 @@ function getSavedTo(id: string) { return dlMeta.value.find(m => m.id === id)?.sa
       <div v-if="diagIssues.length === 0 && !diagLoading" class="empty-state"><p>点击「重新扫描」开始诊断</p></div>
       <div v-if="diagLoading" class="loading-state"><div class="spinner"></div></div>
 
-      <div v-if="diagIssues.length > 0" class="report-layout">
+      <div v-if="diagIssues.length === 1 && diagIssues[0].severity === 'info' && !diagLoading" class="empty-state" style="margin-top:12px">
+        <p>{{ diagIssues[0].message }}</p>
+      </div>
+
+      <div v-else-if="diagIssues.length > 0" class="report-layout">
         <!-- Left: severity tabs -->
         <div class="level-sidebar">
           <div class="level-tab" :class="{ active: activeDiagSeverity === 'error' }" @click="activeDiagSeverity = 'error'">
