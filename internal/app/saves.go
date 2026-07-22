@@ -71,6 +71,10 @@ func (a *App) ScanSaves() ([]SaveInfo, error) {
 		return saves[i].ModifiedAt > saves[j].ModifiedAt
 	})
 
+	if a.config.MaxSaves > 0 && len(saves) > a.config.MaxSaves {
+		saves = saves[:a.config.MaxSaves]
+	}
+
 	if saves == nil {
 		saves = []SaveInfo{}
 	}

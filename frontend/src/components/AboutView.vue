@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { CheckSelfUpdate, DownloadSelfUpdate, InstallSelfUpdate, GetUMMVersion } from '../../wailsjs/go/app/App'
-import { BrowserOpenURL } from '../../wailsjs/runtime/runtime'
+import { BrowserOpenURL, Quit, EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 
 const ummVersion = ref('')
 
@@ -9,14 +9,28 @@ onMounted(async () => {
   try {
     ummVersion.value = await GetUMMVersion()
   } catch { /* ignore */ }
+
+  // Listen for download completion to auto-unlock the install button
+  EventsOn('download:complete', (payload: any) => {
+    const fn = (payload.filename || '').toLowerCase()
+    if (fn === 'umm_update.zip' || fn === 'umm_update.exe') {
+      downloadCompleted.value = true
+      downloadMsg.value = '✅ 下载完成，可以安装了'
+    }
+  })
+})
+
+onUnmounted(() => {
+  EventsOff('download:complete')
 })
 
 const checking = ref(false)
 const updateMsg = ref('')
-const updateInfo = ref<{ currentVersion: string; latestVersion: string; downloadUrl: string; hasUpdate: boolean; releaseName: string } | null>(null)
+const updateInfo = ref<{ currentVersion: string; latestVersion: string; downloadUrl: string; hasUpdate: boolean; releaseName: string; cachedAt?: string } | null>(null)
 const downloading = ref(false)
 const downloadMsg = ref('')
-const downloadOk = ref(false)
+const downloadQueued = ref(false)
+const downloadCompleted = ref(false)
 const installing = ref(false)
 const installMsg = ref('')
 
@@ -25,12 +39,20 @@ async function checkUpdate() {
   updateMsg.value = ''
   updateInfo.value = null
   downloadMsg.value = ''
-  downloadOk.value = false
+  downloadQueued.value = false
+  downloadCompleted.value = false
   installMsg.value = ''
   try {
     const info = await CheckSelfUpdate()
     updateInfo.value = info
-    if (info.hasUpdate) {
+    if (info.cachedAt) {
+      const t = new Date(info.cachedAt).toLocaleString()
+      if (info.hasUpdate) {
+        updateMsg.value = `发现新版本 v${info.latestVersion}（离线缓存，上次检查 ${t}）`
+      } else {
+        updateMsg.value = `当前已是最新版本（离线缓存，上次检查 ${t}）`
+      }
+    } else if (info.hasUpdate) {
       updateMsg.value = `发现新版本 v${info.latestVersion}！`
     } else {
       updateMsg.value = '当前已是最新版本'
@@ -46,12 +68,13 @@ async function downloadUpdate() {
   if (!updateInfo.value?.downloadUrl) return
   downloading.value = true
   downloadMsg.value = ''
-  downloadOk.value = false
+  downloadQueued.value = false
+  downloadCompleted.value = false
   installMsg.value = ''
   try {
-    const taskId = await DownloadSelfUpdate(updateInfo.value.downloadUrl)
-    downloadMsg.value = '⬇ 已加入下载队列，在「下载」页查看进度，完成后回来点击安装'
-    downloadOk.value = true
+    await DownloadSelfUpdate(updateInfo.value.downloadUrl)
+    downloadQueued.value = true
+    downloadMsg.value = '⬇ 已加入下载队列，完成后自动出现安装按钮'
   } catch (e: any) {
     downloadMsg.value = '下载失败: ' + e
   } finally {
@@ -126,17 +149,20 @@ function openURL(url: string) {
           <button class="about-action-btn primary" type="button" :disabled="downloading" @click="downloadUpdate">
             <span>{{ downloading ? '添加中...' : '⬇ 下载更新' }}</span>
           </button>
-          <div v-if="downloadOk" class="about-action-btn" type="button" style="margin-top:4px; text-align:left; min-height:auto; padding:10px 14px; cursor:default">
-            <span>⬇ 已加入下载队列，完成后到 build/bin/ 手动解压覆盖</span>
-          </div>
-          <div v-if="downloadMsg" class="about-update-status" :class="{ success: downloadOk }">
+          <div v-if="downloadMsg" class="about-update-status" :class="{ success: downloadCompleted }">
             {{ downloadMsg }}
           </div>
-          <div v-if="installMsg" class="about-update-status" :class="{ success: installMsg.includes('✅'), error: installMsg.includes('❌') }">
+          <button v-if="downloadCompleted" class="about-action-btn primary" type="button" :disabled="installing" @click="installUpdate" style="margin-top:8px">
+            <span>{{ installing ? '安装中...' : '⬆ 安装更新（自动解压替换，完成后重启即可）' }}</span>
+          </button>
+          <div v-if="installMsg" class="about-update-status" :class="{ success: installMsg.includes('更新已安装'), error: installMsg.includes('失败') }">
             {{ installMsg }}
           </div>
-          <div v-if="installMsg.includes('✅')" class="about-rollback-hint">
+          <div v-if="installMsg.includes('更新已安装')" class="about-rollback-hint">
             🔄 旧版已备份为 .bak，如有异常可删除新版 exe 并去掉 .bak 后缀恢复
+            <button class="about-action-btn primary" type="button" @click="Quit" style="margin-top:8px">
+              <span>🔁 退出并重启 UMM</span>
+            </button>
           </div>
         </div>
       </div>

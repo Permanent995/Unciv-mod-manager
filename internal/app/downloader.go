@@ -673,10 +673,14 @@ func (a *App) emitProgress(t *dlTask) {
 	})
 }
 
-// recalcSpeed maintains a 3-second sliding window of samples.
+// recalcSpeed maintains a 3-second sliding window of samples, capped at 200.
 func (a *App) recalcSpeed(t *dlTask, bytes int64) {
 	now := time.Now()
 	t.speedSamples = append(t.speedSamples, speedSample{bytes: bytes, at: now})
+	// Hard cap to prevent unbounded growth under heavy throughput
+	if len(t.speedSamples) > 200 {
+		t.speedSamples = t.speedSamples[len(t.speedSamples)-200:]
+	}
 	// prune samples older than 3 s
 	cutoff := now.Add(-3 * time.Second)
 	var sum int64

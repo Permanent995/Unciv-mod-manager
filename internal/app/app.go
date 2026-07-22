@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	UMMVersion = "1.8.0"
+	UMMVersion = "1.9.1"
 	UMMRepo    = "Permanent995/unciv-mod-manager" // TODO: 替换为实际仓库
 )
 type ModInfo struct {
@@ -99,6 +99,7 @@ type AppConfig struct {
 	MPUID                 string   `json:"mpUid"`
 	MPPassword            string   `json:"mpPassword"`
 		CustomMirrors         []string `json:"customMirrors"`
+	MaxSaves              int      `json:"maxSaves"`
 		MirrorMode            string   `json:"mirrorMode"`
 		SelectedMirror        string   `json:"selectedMirror"`
 }
@@ -162,6 +163,9 @@ func (a *App) initConfig() {
 	}
 	if a.config.CustomMirrors == nil {
 		a.config.CustomMirrors = []string{}
+	}
+	if a.config.MaxSaves == 0 {
+		a.config.MaxSaves = 100
 	}
 }
 

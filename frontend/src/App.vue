@@ -194,6 +194,7 @@ body {
 .title-actions {
   display: flex;
   gap: 2px;
+  --wails-draggable: no-drag;
 }
 .tb-btn {
   width: 36px;

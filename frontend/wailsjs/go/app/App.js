@@ -14,6 +14,10 @@ export function AutoDetectUncivPath() {
   return window['go']['app']['App']['AutoDetectUncivPath']();
 }
 
+export function AutoDetectUncivPaths() {
+  return window['go']['app']['App']['AutoDetectUncivPaths']();
+}
+
 export function BackupMod(arg1, arg2) {
   return window['go']['app']['App']['BackupMod'](arg1, arg2);
 }
@@ -160,6 +164,10 @@ export function ListBackups() {
 
 export function ListSaveArchives() {
   return window['go']['app']['App']['ListSaveArchives']();
+}
+
+export function MigrateUncivData(arg1, arg2) {
+  return window['go']['app']['App']['MigrateUncivData'](arg1, arg2);
 }
 
 export function OpenSnapshotFolder() {

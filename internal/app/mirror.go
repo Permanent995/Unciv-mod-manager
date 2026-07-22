@@ -25,8 +25,8 @@ const probeTimeout = 6 * time.Second
 
 // ── Default mirror list ─────────────────────────────────────────────
 
-// defaultMirrors returns the built-in mirror list.
-func defaultMirrors() []string {
+// defaultMirrors is the built-in mirror list.  A var so tests can swap it.
+var defaultMirrors = func() []string {
 	return []string{
 		// ghproxy-style (prefix proxy)
 		"https://ghfast.top/",           // ✅ 确认可用

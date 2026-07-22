@@ -18,6 +18,7 @@ export namespace app {
 	    mpUid: string;
 	    mpPassword: string;
 	    customMirrors: string[];
+	    maxSaves: number;
 	    mirrorMode: string;
 	    selectedMirror: string;
 	
@@ -44,6 +45,7 @@ export namespace app {
 	        this.mpUid = source["mpUid"];
 	        this.mpPassword = source["mpPassword"];
 	        this.customMirrors = source["customMirrors"];
+	        this.maxSaves = source["maxSaves"];
 	        this.mirrorMode = source["mirrorMode"];
 	        this.selectedMirror = source["selectedMirror"];
 	    }
@@ -426,6 +428,7 @@ export namespace app {
 	    downloadUrl: string;
 	    hasUpdate: boolean;
 	    releaseName: string;
+	    cachedAt?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new SelfUpdateInfo(source);
@@ -438,6 +441,7 @@ export namespace app {
 	        this.downloadUrl = source["downloadUrl"];
 	        this.hasUpdate = source["hasUpdate"];
 	        this.releaseName = source["releaseName"];
+	        this.cachedAt = source["cachedAt"];
 	    }
 	}
 	export class UncivInfo {
@@ -458,6 +462,24 @@ export namespace app {
 	        this.hasModsDir = source["hasModsDir"];
 	        this.hasSettings = source["hasSettings"];
 	        this.isValid = source["isValid"];
+	    }
+	}
+	export class UncivPathOption {
+	    path: string;
+	    version: string;
+	    hasExe: boolean;
+	    hasJar: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new UncivPathOption(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.version = source["version"];
+	        this.hasExe = source["hasExe"];
+	        this.hasJar = source["hasJar"];
 	    }
 	}
 

@@ -8,6 +8,8 @@ export function ArchiveSave(arg1:string):Promise<string>;
 
 export function AutoDetectUncivPath():Promise<string>;
 
+export function AutoDetectUncivPaths():Promise<Array<app.UncivPathOption>>;
+
 export function BackupMod(arg1:string,arg2:string):Promise<string>;
 
 export function BuildDownloadURL(arg1:string,arg2:app.ProxyConfig):Promise<string>;
@@ -81,6 +83,8 @@ export function LaunchUnciv():Promise<void>;
 export function ListBackups():Promise<Array<app.ModBackup>>;
 
 export function ListSaveArchives():Promise<Array<app.SaveArchive>>;
+
+export function MigrateUncivData(arg1:string,arg2:string):Promise<Record<string, number>>;
 
 export function OpenSnapshotFolder():Promise<string>;
 

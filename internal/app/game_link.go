@@ -112,13 +112,60 @@ func (a *App) ValidateUncivPath(path string) UncivInfo {
 	return info
 }
 
-// AutoDetectUncivPath tries common locations to find Unciv.
-func (a *App) AutoDetectUncivPath() string {
-	paths := a.getCandidatePaths()
-	for _, p := range paths {
-		if info := a.ValidateUncivPath(p); info.IsValid {
-			return p
+// UncivPathOption is a detected Unciv installation.
+type UncivPathOption struct {
+	Path    string `json:"path"`
+	Version string `json:"version"`
+	HasExe  bool   `json:"hasExe"`
+	HasJar  bool   `json:"hasJar"`
+}
+
+// AutoDetectUncivPaths scans common locations and returns ALL valid Unciv
+// installations found, so the user can choose between multiple versions.
+func (a *App) AutoDetectUncivPaths() []UncivPathOption {
+	seen := map[string]bool{}
+	var results []UncivPathOption
+
+	for _, p := range a.getCandidatePaths() {
+		// Resolve to absolute to deduplicate
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			abs = p
 		}
+		abs = filepath.Clean(abs)
+		if seen[abs] {
+			continue
+		}
+		seen[abs] = true
+
+		if info := a.ValidateUncivPath(abs); info.IsValid {
+			// Temporarily set path so version detection works
+			oldPath := a.config.UncivPath
+			a.config.UncivPath = abs
+			ver := a.GetUncivVersion()
+			a.config.UncivPath = oldPath
+
+			results = append(results, UncivPathOption{
+				Path:    abs,
+				Version: ver,
+				HasExe:  info.HasExe,
+				HasJar:  info.HasJar,
+			})
+		}
+	}
+
+	if results == nil {
+		results = []UncivPathOption{}
+	}
+	return results
+}
+
+// AutoDetectUncivPath tries common locations to find Unciv.  Legacy wrapper;
+// prefer AutoDetectUncivPaths for multi-version detection.
+func (a *App) AutoDetectUncivPath() string {
+	opts := a.AutoDetectUncivPaths()
+	if len(opts) > 0 {
+		return opts[0].Path
 	}
 	return ""
 }
@@ -198,6 +245,82 @@ func (a *App) IsUncivRunning() bool {
 	return false
 }
 
+// MigrateUncivData copies mods, saves, and maps from one Unciv installation
+// to another.  Existing files in the destination are NOT overwritten.
+// GameSettings.json and binaries are deliberately excluded.
+func (a *App) MigrateUncivData(fromPath, toPath string) (map[string]int, error) {
+	result := map[string]int{"mods": 0, "saves": 0, "maps": 0}
+
+	dirs := []struct {
+		src string
+		key string
+	}{
+		{filepath.Join(fromPath, "mods"), "mods"},
+		{filepath.Join(fromPath, "SaveFiles"), "saves"},
+		{filepath.Join(fromPath, "maps"), "maps"},
+	}
+
+	for _, d := range dirs {
+		srcDir := d.src
+		dstDir := filepath.Join(toPath, filepath.Base(srcDir))
+
+		if _, err := os.Stat(srcDir); err != nil {
+			continue // source dir doesn't exist — nothing to copy
+		}
+		os.MkdirAll(dstDir, 0755)
+
+		entries, err := os.ReadDir(srcDir)
+		if err != nil {
+			continue
+		}
+
+		for _, e := range entries {
+			src := filepath.Join(srcDir, e.Name())
+			dst := filepath.Join(dstDir, e.Name())
+
+			// Skip if destination already exists (incremental, no overwrite)
+			if _, err := os.Stat(dst); err == nil {
+				continue
+			}
+
+			if e.IsDir() {
+				if err := copyDir(src, dst); err == nil {
+					result[d.key]++
+				}
+			} else {
+				if err := copyFile(src, dst); err == nil {
+					result[d.key]++
+				}
+			}
+		}
+	}
+
+	return result, nil
+}
+
+// copyDir recursively copies a directory.
+func copyDir(src, dst string) error {
+	os.MkdirAll(dst, 0755)
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		s := filepath.Join(src, e.Name())
+		d := filepath.Join(dst, e.Name())
+		if e.IsDir() {
+			if err := copyDir(s, d); err != nil {
+				return err
+			}
+		} else {
+			if err := copyFile(s, d); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // LaunchUnciv starts the Unciv game process.
 func (a *App) LaunchUnciv() error {
 	if a.config.UncivPath == "" {
@@ -225,15 +348,46 @@ func (a *App) getCandidatePaths() []string {
 		paths = append(paths, filepath.Dir(exe))
 	}
 
-	// User's Desktop
 	if home, err := os.UserHomeDir(); err == nil {
-		paths = append(paths, filepath.Join(home, "Desktop"), filepath.Join(home, "Desktop", "官方unciv文件"))
+		desktop := filepath.Join(home, "Desktop")
+		paths = append(paths, desktop)
+
+		// Scan Desktop subdirectories for Unciv installations.
+		// Many users keep multiple versions in folders like "Unciv 4.12.2".
+		if entries, err := os.ReadDir(desktop); err == nil {
+			for _, e := range entries {
+				if !e.IsDir() {
+					continue
+				}
+				name := strings.ToLower(e.Name())
+				if strings.Contains(name, "unciv") {
+					paths = append(paths, filepath.Join(desktop, e.Name()))
+				}
+			}
+		}
+
+		// Other common locations
+		paths = append(paths,
+			filepath.Join(home, "Desktop", "官方unciv文件"),
+			filepath.Join(home, "Downloads"),
+			filepath.Join(home, "Documents"),
+		)
+
+		// Scan Downloads for Unciv folders too
+		if entries, err := os.ReadDir(filepath.Join(home, "Downloads")); err == nil {
+			for _, e := range entries {
+				if e.IsDir() && strings.Contains(strings.ToLower(e.Name()), "unciv") {
+					paths = append(paths, filepath.Join(home, "Downloads", e.Name()))
+				}
+			}
+		}
 	}
 
 	// Program Files
 	paths = append(paths,
 		filepath.Join("C:", "Program Files", "Unciv"),
 		filepath.Join("C:", "Program Files (x86)", "Unciv"),
+		filepath.Join("D:", "Games", "Unciv"),
 	)
 
 	// Add saved paths from config

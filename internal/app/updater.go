@@ -27,12 +27,13 @@ func (a *App) CheckModUpdates() ([]ModUpdateInfo, error) {
 	cachePath := filepath.Join(a.config.UncivPath, "ModListCache.json")
 	raw, err := os.ReadFile(cachePath)
 	if err != nil {
-		return nil, fmt.Errorf("无法读取 ModListCache.json（请先运行一次 Unciv 以生成该文件）: %w", err)
+		// Unciv hasn't been run yet — no cache, nothing to compare
+		return []ModUpdateInfo{}, nil
 	}
 
 	arr := gjson.ParseBytes(raw)
 	if !arr.IsArray() {
-		return nil, fmt.Errorf("ModListCache.json 格式异常")
+		return []ModUpdateInfo{}, nil
 	}
 
 	// Build owner/repo → pushed_at map from cache

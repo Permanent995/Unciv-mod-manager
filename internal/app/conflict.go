@@ -232,6 +232,9 @@ func (a *App) AnalyzeConflicts() ([]ConflictReport, error) {
 		}
 	}
 
+	if reports == nil {
+		reports = []ConflictReport{}
+	}
 	return reports, nil
 }
 

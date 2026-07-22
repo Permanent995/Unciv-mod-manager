@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { GetAppConfig, SaveAppConfig, SelectUncivDir, AutoDetectUncivPath, GetMirrorHealth, TestSingleMirror } from '../../wailsjs/go/app/App'
+import { GetAppConfig, SaveAppConfig, SelectUncivDir, AutoDetectUncivPaths, SetUncivPath, MigrateUncivData, GetMirrorHealth, TestSingleMirror } from '../../wailsjs/go/app/App'
 import { app } from '../../wailsjs/go/models'
 import IconFolder from './icons/IconFolder.vue'
 import IconSearch from './icons/IconSearch.vue'
 import IconEye from './icons/IconEye.vue'
+import IconArchive from './icons/IconArchive.vue'
 import IconGlobe from './icons/IconGlobe.vue'
 import IconRefresh from './icons/IconRefresh.vue'
 import IconCog from './icons/IconCog.vue'
@@ -19,7 +20,7 @@ const config = ref<app.AppConfig>({
   zoomLevel: 100, sidebarPos: 'left', sidebarWidth: 220, hiddenNav: [], theme: 'light',
   translateProvider: 'microsoft', translateCustomUrl: '', translateCustomKey: '', translateCustomModel: '',
   githubToken: '', mpServer: '', mpUid: '', mpPassword: '',
-  customMirrors: [], mirrorMode: 'auto', selectedMirror: '',
+  customMirrors: [], mirrorMode: 'auto', selectedMirror: '', maxSaves: 100,
 })
 
 const navItems = [
@@ -50,11 +51,50 @@ async function selectPath() {
   } catch (e) { console.error(e) }
 }
 
+const detectedPaths = ref<{ path: string; version: string; hasExe: boolean; hasJar: boolean }[]>([])
+const showDetectPopup = ref(false)
+const migrateFrom = ref('')
+const migrateTo = ref('')
+const migrateMsg = ref('')
+
 async function autoDetect() {
   try {
-    const path = await AutoDetectUncivPath()
-    if (path) config.value = await GetAppConfig()
+    const paths = await AutoDetectUncivPaths()
+    if (paths.length === 1) {
+      await SetUncivPath(paths[0].path)
+      config.value = await GetAppConfig()
+    } else if (paths.length > 1) {
+      detectedPaths.value = paths
+      if (!localStorage.getItem('umm_hide_detect_popup')) {
+        showDetectPopup.value = true
+      }
+    }
   } catch (e) { console.error(e) }
+}
+
+function dismissPopupForever() {
+  localStorage.setItem('umm_hide_detect_popup', '1')
+  showDetectPopup.value = false
+}
+
+async function pickDetectedPath(path: string) {
+  showDetectPopup.value = false
+  await SetUncivPath(path)
+  config.value = await GetAppConfig()
+}
+
+async function doMigrate() {
+  if (!migrateFrom.value || !migrateTo.value) return
+  if (migrateFrom.value === migrateTo.value) {
+    migrateMsg.value = '❌ 源版本和目标版本相同'
+    return
+  }
+  try {
+    const r = await MigrateUncivData(migrateFrom.value, migrateTo.value)
+    migrateMsg.value = `✅ 迁移完成：模组 ${r.mods} 个、存档 ${r.saves} 个、地图 ${r.maps} 个`
+  } catch (e: any) {
+    migrateMsg.value = '迁移失败: ' + e
+  }
 }
 
 function toggleNav(id: string, locked?: boolean) {
@@ -136,6 +176,60 @@ function formatTime(iso: string): string {
             <button @click="selectPath" class="btn-primary">选择目录</button>
             <button @click="autoDetect" class="btn-outline">自动检测</button>
           </div>
+          <!-- 多版本选择弹窗 -->
+          <div v-if="showDetectPopup" class="detect-overlay" @click.self="showDetectPopup = false">
+            <div class="detect-popup">
+              <div class="detect-popup-title">检测到 {{ detectedPaths.length }} 个 Unciv 安装</div>
+              <div
+                v-for="p in detectedPaths"
+                :key="p.path"
+                class="detect-option"
+                @click="pickDetectedPath(p.path)"
+              >
+                <div class="detect-option-path">{{ p.path }}</div>
+                <div class="detect-option-ver">
+                  <template v-if="p.version">🕹️ v{{ p.version }}</template>
+                  <template v-else>版本未知</template>
+                  <span v-if="p.hasExe" class="tag">exe</span>
+                  <span v-if="p.hasJar" class="tag">jar</span>
+                </div>
+              </div>
+
+              <!-- 迁移区 -->
+              <div v-if="detectedPaths.length >= 2" class="migrate-section">
+                <div class="migrate-title">📦 迁移数据到新版</div>
+                <div class="migrate-row">
+                  <label>源版本（旧）：</label>
+                  <select v-model="migrateFrom">
+                    <option value="" disabled>-- 选择旧版 --</option>
+                    <option v-for="p in detectedPaths" :key="p.path" :value="p.path">
+                      {{ p.version || p.path.slice(-30) }}
+                    </option>
+                  </select>
+                </div>
+                <div class="migrate-row">
+                  <label>目标版本（新）：</label>
+                  <select v-model="migrateTo">
+                    <option value="" disabled>-- 选择新版 --</option>
+                    <option v-for="p in detectedPaths" :key="p.path" :value="p.path">
+                      {{ p.version || p.path.slice(-30) }}
+                    </option>
+                  </select>
+                </div>
+                <button class="btn-primary" style="margin-top:6px;width:100%" @click="doMigrate">
+                  ⬇ 迁移 mods + 存档 + 地图
+                </button>
+                <div v-if="migrateMsg" class="mirror-msg" :class="{ ok: migrateMsg.includes('✅') }">
+                  {{ migrateMsg }}
+                </div>
+              </div>
+
+              <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+                <button class="btn-outline" @click="showDetectPopup = false">关闭</button>
+                <a class="dismiss-link" @click="dismissPopupForever">不再提示</a>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -166,6 +260,17 @@ function formatTime(iso: string): string {
       <div class="card">
         <div class="card-icon"><IconEye :size="24" /></div>
         <div class="card-body">
+          <div class="card-title">存档显示数</div>
+          <div class="card-desc">最多显示多少条存档，默认 100</div>
+          <div class="row">
+            <input type="number" min="10" max="1000" step="10" :value="config.maxSaves || 100" @input="config.maxSaves = Number(($event.target as HTMLInputElement).value); save()" class="input-num" />
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-icon"><IconEye :size="24" /></div>
+        <div class="card-body">
           <div class="card-title">隐藏功能</div>
           <div class="card-desc">取消勾选可隐藏导航项，设置和关于不可隐藏</div>
           <div class="check-group">
@@ -173,6 +278,39 @@ function formatTime(iso: string): string {
               <input type="checkbox" :checked="!(config.hiddenNav || []).includes(item.id)" :disabled="item.locked" @change="toggleNav(item.id, item.locked)" />
               {{ item.label }}
             </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-icon"><IconArchive :size="24" /></div>
+        <div class="card-body">
+          <div class="card-title">一键迁移</div>
+          <div class="card-desc">把旧版 Unciv 的 mods、存档、地图复制到新版</div>
+          <div class="migrate-row">
+            <label>源版本：</label>
+            <select v-model="migrateFrom">
+              <option value="" disabled>-- 旧版 --</option>
+              <option v-for="p in detectedPaths" :key="'src'+p.path" :value="p.path">
+                {{ p.version || p.path.slice(-30) }}
+              </option>
+            </select>
+          </div>
+          <div class="migrate-row">
+            <label>目标版本：</label>
+            <select v-model="migrateTo">
+              <option value="" disabled>-- 新版 --</option>
+              <option v-for="p in detectedPaths" :key="'dst'+p.path" :value="p.path">
+                {{ p.version || p.path.slice(-30) }}
+              </option>
+            </select>
+          </div>
+          <div class="row" style="margin-top:8px;gap:8px">
+            <button class="btn-primary" @click="doMigrate">⬇ 一键迁移</button>
+            <button class="btn-outline" @click="autoDetect">🔍 重新扫描</button>
+          </div>
+          <div v-if="migrateMsg" class="mirror-msg" :class="{ ok: migrateMsg.includes('✅') }">
+            {{ migrateMsg }}
           </div>
         </div>
       </div>
@@ -310,4 +448,39 @@ function formatTime(iso: string): string {
 .btn-retest:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .mirror-msg { font-size: 12px; padding: 4px 0; color: var(--danger); }
 .mirror-msg.ok { color: var(--success); }
+
+.dismiss-link { font-size: 12px; color: var(--text-muted); cursor: pointer; text-decoration: underline; }
+.dismiss-link:hover { color: var(--text-secondary); }
+
+/* ── 多版本检测弹窗 ── */
+.detect-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+}
+.detect-popup {
+  background: var(--bg-primary); border: 1px solid var(--border-color);
+  border-radius: 12px; padding: 20px; min-width: 420px; max-width: 560px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+.detect-popup-title {
+  font-size: 15px; font-weight: 700; margin-bottom: 12px;
+  color: var(--text-primary);
+}
+.detect-option {
+  padding: 10px 12px; border: 1px solid var(--border-color);
+  border-radius: 8px; margin-bottom: 6px; cursor: pointer;
+  transition: all 0.15s;
+}
+.detect-option:hover { border-color: var(--accent); background: rgba(79,70,229,0.05); }
+.detect-option-path { font-size: 13px; font-weight: 600; color: var(--text-primary); word-break: break-all; }
+.detect-option-ver { font-size: 12px; color: var(--text-secondary); margin-top: 4px; display: flex; align-items: center; gap: 6px; }
+.tag { padding: 1px 6px; background: var(--bg-card); border-radius: 3px; font-size: 11px; font-weight: 600; }
+
+/* ── 迁移 ── */
+.migrate-section { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-color); }
+.migrate-title { font-size: 13px; font-weight: 700; margin-bottom: 8px; color: var(--text-primary); }
+.migrate-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.migrate-row label { font-size: 12px; color: var(--text-secondary); white-space: nowrap; min-width: 90px; }
+.migrate-row select { flex: 1; padding: 6px 8px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 12px; }
 </style>

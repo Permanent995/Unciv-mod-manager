@@ -19,7 +19,8 @@ func (a *App) ScanMods() ([]ModInfo, error) {
 
 	modsDir := filepath.Join(uncivPath, "mods")
 	if _, err := os.Stat(modsDir); err != nil {
-		return nil, fmt.Errorf("mods 目录不存在: %v", err)
+		// Unciv 可能没运行过，mods/ 还未创建——不是错误
+		return []ModInfo{}, nil
 	}
 
 	entries, err := os.ReadDir(modsDir)
