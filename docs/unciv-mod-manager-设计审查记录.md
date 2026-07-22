@@ -796,6 +796,98 @@ ModsView.vue 已在 #53 中一并处理。
 
 ---
 
+## Session 10 (2026-07-22) — 多版本检测、数据迁移、健壮性修复
+
+### 66. 多版本 Unciv 自动检测（✅ 新增）
+
+**问题**：`AutoDetectUncivPath` 只返回第一个有效路径，第二、第三个版本被忽略。
+
+**修复**：
+- 新增 `AutoDetectUncivPaths() []UncivPathOption`，返回所有检测到的安装，包含版本号、exe/jar 标识
+- 候选路径大幅扩展：Desktop 根 + 所有含 "unciv" 子目录 + Downloads + Documents + D:/Games
+- `UncivPathOption` 结构体包含 `Path`、`Version`、`HasExe`、`HasJar`
+- 前端弹窗：1 个版本自动选中，2+ 版本弹出选择列表
+- 弹窗支持"不再提示"（localStorage 记录）
+
+### 67. 一键迁移（✅ 新增）
+
+**问题**：升级 Unciv 版本后，需要手动搬 mods/、SaveFiles/、maps/。
+
+**修复**：
+- `MigrateUncivData(fromPath, toPath)` — 增量复制，不覆盖已有文件
+- 迁移范围：`mods/` + `SaveFiles/` + `maps/`
+- 不迁移：`GameSettings.json`（版本间字段可能不兼容）、Unciv 本体
+- `copyDir()` 递归复制辅助函数
+- 前端：检测弹窗内嵌迁移选择器 + 设置页独立"一键迁移"卡片（含重新扫描按钮）
+
+### 68. 存档显示数可配置（✅ 新增）
+
+**问题**：存档列表无限制显示，用户想控制展示数量。
+
+**修复**：
+- `AppConfig` 新增 `MaxSaves` 字段，默认 100
+- `ScanSaves` 按 `ModifiedAt` 降序后截断到 `MaxSaves`
+- 设置页新增"存档显示数"数字输入框（10-1000）
+
+### 69. ScanMods 缺目录不崩溃（✅ 健壮性）
+
+**问题**：Unciv 路径无 `mods/` 时 `ScanMods` 直接报错，导致冲突检测白屏。
+
+**修复**：`mods/` 不存在时返回 `[]ModInfo{}, nil`，前端正常渲染空列表。
+
+### 70. CheckModUpdates 缺缓存不崩溃（✅ 健壮性）
+
+**问题**：`ModListCache.json` 不存在时直接 `fmt.Errorf`，前端显示红色报错。
+
+**修复**：缓存文件不存在或格式异常时返回 `[]ModUpdateInfo{}, nil`，前端正常显示"未找到可检查的模组"。
+
+### 71. AnalyzeConflicts nil slice 修复（🔴 白屏）
+
+**现象**：无模组时 `var reports []ConflictReport` 始终 nil，JSON 序列化为 `null`，前端 `reports.length` TypeError → 白屏。
+
+**修复**：`return reports, nil` 前加 `if reports == nil { reports = []ConflictReport{} }`。
+
+### 72. DiagnoseMods 无模组误报"通过自检"（✅ 健壮性）
+
+**现象**：没有模组时诊断返回空列表，前端逻辑 `diagIssues.length === 0 && diagDone` 触发"✅ 所有模组通过自检"。
+
+**修复**：
+- Go 端：`len(mods) == 0` 时返回 `[{severity: "info", message: "未找到任何模组..."}]`
+- 前端：新增 `v-if="diagIssues[0].severity === 'info'"` 模板分支，单独展示提示信息
+
+### 73. fetchLatestTagViaMirror URL 拼接 bug（🔴 生产 bug）
+
+**现象**：`strings.TrimRight(mirror, "/")` + `"https://github.com/..."` 拼出 `https://ghfast.tophttps://github.com/...` 缺分隔符，镜像回退永远不工作。
+
+**修复**：改为 `base + "/" + "https://..."` 确保恰好一个 `/`。
+
+### 74. 自更新测试（✅ 新增 20 个测试）
+
+新增 `internal/app/selfupdate_test.go`，20 个测试覆盖：
+
+| 类别 | 测试 |
+|------|------|
+| 版本比较边界 | 不等长 `1.9` vs `1.9.0`、非数字 `v2.0-rc1`、空串、纯字母 |
+| 缓存读写 | Roundtrip、缺失文件、垃圾数据 |
+| InstallSelfUpdate | 无文件报错、完整端到端（用 build/bin/exe 替换测试二进制） |
+| CheckSelfUpdate | API 返回新版/无资产/404/断连→缓存降级/全线崩盘 |
+| fetchLatestTagViaMirror | 302 跳转/无跳转/连接拒绝/URL 无 tag |
+| fetchJSON | 成功/HTTP 500/连接拒绝/响应超 1MB 截断 |
+| MirrorFallback | API 不可用→镜像 302 成功拿到 tag |
+
+自更新模块覆盖率：`CheckSelfUpdate` 92.7%，其余核心函数 100%。
+
+### 75. 审查发现的安全/泄漏修复（✅）
+
+| 位置 | 问题 | 修复 |
+|------|------|------|
+| `fetchJSON` | JSON 响应无大小限制 | `io.LimitReader(1<<20)` |
+| `fetchJSON` | 非 200 时 body 未排空 | `io.Copy(io.Discard, resp.Body)` |
+| `fetchLatestTagViaMirror` | 同上 | 同上 |
+| `recalcSpeed` | `speedSamples` 无上限 | 超过 200 条丢弃旧样本 |
+
+---
+
 ## 十、参考文档
 
 - LYT VPK 源码：`c:\Users\drj13\Desktop\ak\lytvpk-2.5.4\`
