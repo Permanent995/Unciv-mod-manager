@@ -14,9 +14,12 @@ import (
 )
 
 const (
-	UMMVersion = "1.9.2"
-	UMMRepo    = "Permanent995/unciv-mod-manager" // TODO: 替换为实际仓库
+	UMMRepo = "Permanent995/unciv-mod-manager"
 )
+
+// UMMVersion is set at build time via -ldflags.
+// Falls back to "dev" when running from source (wails dev).
+var UMMVersion = "dev"
 type ModInfo struct {
 	Name          string   `json:"name"`
 	Folder        string   `json:"folder"`
