@@ -111,6 +111,11 @@ function toggleNav(id: string, locked?: boolean) {
 function setZoom(v: number) { config.value.zoomLevel = v; save() }
 function setSidebar(pos: string) { config.value.sidebarPos = pos; save() }
 
+function setThemeVariant() {
+  document.documentElement.setAttribute('data-theme-variant', config.value.themeVariant || 'pure')
+  save()
+}
+
 // Mirror functions
 async function refreshHealth() {
   testingRef.value = true
@@ -239,7 +244,7 @@ function formatTime(iso: string): string {
         <div class="card-body">
           <div class="card-title">浅色主题风格</div>
           <div class="card-desc">仅亮色模式下生效</div>
-          <select v-model="config.themeVariant" @change="save" class="input-select">
+          <select v-model="config.themeVariant" @change="setThemeVariant" class="input-select">
             <option value="pure">纯白</option>
             <option value="warm">暖白</option>
             <option value="blue">浅蓝</option>
