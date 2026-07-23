@@ -20,9 +20,15 @@ const (
 // UMMVersion is set at build time via -ldflags.
 // Falls back to "dev" when running from source (wails dev).
 var UMMVersion = "dev"
+
+// ModInfo represents a single mod installed under Unciv's mods/ directory.
+// Folder is the subdirectory name (e.g. "Go-Astray").
 type ModInfo struct {
 	Name          string   `json:"name"`
+	// Folder is the subdirectory name under mods/ (e.g. "Go-Astray").
 	Folder        string   `json:"folder"`
+	// Author is extracted from ModOptions.json; omitempty means the JSON
+	// field is omitted when empty so the frontend receives a cleaner object.
 	Author        string   `json:"author,omitempty"`
 	IsBaseRuleset bool     `json:"isBaseRuleset"`
 	Topics        []string `json:"topics,omitempty"`
@@ -35,6 +41,9 @@ type ModInfo struct {
 	HasPreview    bool     `json:"hasPreview"`
 }
 
+// Entity is a generic parsed JSON entity from any Unciv ruleset file.
+// It is NOT specific to units — it covers buildings, techs, resources,
+// and all other entity types. FileType distinguishes them.
 type Entity struct {
 	ModName          string `json:"modName"`
 	FileType         string `json:"fileType"`
@@ -53,6 +62,9 @@ type Entity struct {
 
 var fileCategory = map[string]string{
 	"Buildings.json": "建筑", "Units.json": "单位",
+	// Both UnitPromotions.json and Promotions.json map to "单位晋升".
+	// Unciv mods use either name; fileCategory is just a label lookup,
+	// so duplicates are harmless — they don't affect conflict detection.
 	"UnitTypes.json": "单位类型", "UnitPromotions.json": "单位晋升",
 	"Promotions.json": "单位晋升", "Techs.json": "科技",
 	"TileResources.json": "地块资源", "Terrains.json": "地形",
@@ -74,12 +86,15 @@ func classifyFile(ft string) string {
 	return "other"
 }
 
+// ConflictReport describes a single conflict between two mods.
+// ModA and ModB are the two conflicting parties. If three mods conflict,
+// multiple reports are generated (A-B, A-C, B-C) — all mods participate.
 type ConflictReport struct {
 	Level    string `json:"level"`
 	Category string `json:"category"`
 	ModA     string `json:"modA"`
 	ModB     string `json:"modB"`
-	EntityID string `json:"entityID"`
+	EntityID string `json:"entityID"`		
 	Message  string `json:"message"`
 	Detail   string `json:"detail"`
 }
@@ -88,8 +103,9 @@ type AppConfig struct {
 	UncivPath             string   `json:"uncivPath"`
 	SavedPaths            []string `json:"savedPaths"`
 	LastActivePath        string   `json:"lastActivePath"`
+	// ZoomLevel is the UI zoom percentage. 100 = normal, range [80, 150].
 	ZoomLevel             int      `json:"zoomLevel"`
-	SidebarPos            string   `json:"sidebarPos"`
+	SidebarPos            string   `json:"sidebarPos"`		
 	SidebarWidth          int      `json:"sidebarWidth"`
 	HiddenNav             []string `json:"hiddenNav"`
 	Theme                 string   `json:"theme"`
@@ -97,7 +113,7 @@ type AppConfig struct {
 	TranslateCustomURL    string   `json:"translateCustomUrl"`
 	TranslateCustomKey    string   `json:"translateCustomKey"`
 	TranslateCustomModel  string   `json:"translateCustomModel"`
-	GitHubToken           string   `json:"githubToken"`
+	GitHubToken           string   `json:"githubToken"`			
 	MPServer              string   `json:"mpServer"`
 	MPUID                 string   `json:"mpUid"`
 	MPPassword            string   `json:"mpPassword"`

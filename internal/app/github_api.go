@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -55,19 +56,11 @@ func (a *App) FetchReleases(githubURL string) ([]GHRelease, error) {
 
 	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=20", owner, repo)
 
-	// Try direct first
 	releases, err := a.fetchReleasesFrom(apiURL)
 	if err == nil {
 		return releases, nil
 	}
-	// Fallback via mirrors
-	for _, m := range a.getAllMirrors() {
-		releases, err = a.fetchReleasesFrom(mirrorURL(apiURL, m))
-		if err == nil {
-			return releases, nil
-		}
-	}
-	return nil, fmt.Errorf("无法获取 Releases 列表（直连和镜像均失败）: %w", err)
+	return nil, fmt.Errorf("无法获取 Releases 列表: %w", err)
 }
 
 func (a *App) fetchReleasesFrom(apiURL string) ([]GHRelease, error) {
@@ -86,15 +79,17 @@ func (a *App) fetchReleasesFrom(apiURL string) ([]GHRelease, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
+		io.Copy(io.Discard, resp.Body)
 		LogWarn("API", "GitHub限流: url=%s code=%d", apiURL, resp.StatusCode)
 		return nil, fmt.Errorf("GitHub API 限流，请填入 Token 或稍后再试")
 	}
 	if resp.StatusCode != http.StatusOK {
+		io.Copy(io.Discard, resp.Body)
 		return nil, fmt.Errorf("API 返回 %d", resp.StatusCode)
 	}
 
 	var releases []GHRelease
-	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&releases); err != nil {
 		return nil, err
 	}
 	return releases, nil

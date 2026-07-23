@@ -98,8 +98,12 @@ async function loadReleases() {
   loadingReleases.value = true
   releasesError.value = ''
   detailReleases.value = []
-  try { detailReleases.value = await FetchReleases(detail.value.htmlUrl) }
-  catch (e: any) { releasesError.value = '获取版本失败: ' + e }
+  try {
+    detailReleases.value = await FetchReleases(detail.value.htmlUrl)
+    if (detailReleases.value.length === 0) {
+      releasesError.value = '该仓库没有发布任何 Release（版本）'
+    }
+  } catch (e: any) { releasesError.value = '获取版本失败: ' + e }
   finally { loadingReleases.value = false }
 }
 
@@ -199,7 +203,7 @@ function formatSize(bytes: number): string {
         <div class="detail-section">
           <div class="detail-section-hdr">
             <h3>📦 版本</h3>
-            <button v-if="!detailReleases.length && !loadingReleases" class="btn-go outline sm" @click="loadReleases">
+            <button v-if="!detailReleases.length || loadingReleases" class="btn-go outline sm" :disabled="loadingReleases" @click="loadReleases">
               {{ loadingReleases ? '加载中...' : '查看版本' }}
             </button>
           </div>
@@ -294,7 +298,8 @@ function formatSize(bytes: number): string {
 .bcat-count { font-size: 10px; opacity: 0.7; }
 
 .browse-detail { flex: 1; overflow-y: auto; padding: 0 0 0 12px; }
-.back-btn { padding: 4px 12px; background: transparent; border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-secondary); cursor: pointer; font-size: 12px; margin-bottom: 10px; }
+.back-btn { padding: 6px 16px; background: var(--bg-card); border: 1px solid var(--accent); border-radius: 6px; color: var(--accent); cursor: pointer; font-size: 13px; font-weight: 600; margin-bottom: 14px; display: inline-flex; align-items: center; gap: 6px; }
+.back-btn:hover { background: var(--accent); color: #fff; }
 .browse-detail h2 { font-size: 20px; margin-bottom: 6px; color: var(--text-primary); }
 .detail-meta { display: flex; gap: 16px; font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
 .detail-link { display: block; font-size: 12px; color: var(--accent); margin-bottom: 8px; word-break: break-all; text-decoration: none; }
