@@ -1,6 +1,6 @@
 module unciv-mod-manager
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/tidwall/gjson v1.19.0
