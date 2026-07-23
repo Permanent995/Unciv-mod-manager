@@ -19,6 +19,7 @@ export namespace app {
 	    mpPassword: string;
 	    customMirrors: string[];
 	    maxSaves: number;
+	    themeVariant: string;
 	    mirrorMode: string;
 	    selectedMirror: string;
 	
@@ -46,6 +47,7 @@ export namespace app {
 	        this.mpPassword = source["mpPassword"];
 	        this.customMirrors = source["customMirrors"];
 	        this.maxSaves = source["maxSaves"];
+	        this.themeVariant = source["themeVariant"];
 	        this.mirrorMode = source["mirrorMode"];
 	        this.selectedMirror = source["selectedMirror"];
 	    }

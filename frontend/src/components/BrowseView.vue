@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { SearchOnlineMods, FetchReadme, FetchReleases, StartDownloadWithMirror, GetAppConfig } from '../../wailsjs/go/app/App'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { SearchOnlineMods, FetchReadme, FetchReleases, StartDownloadWithMirror, GetAppConfig, ExtractMod, CleanupTempFile } from '../../wailsjs/go/app/App'
 import { TranslateText } from '../../wailsjs/go/app/App'
 import { marked } from 'marked'
+import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 
 type OnlineMod = {
   name: string; owner: string; repo: string; description: string
@@ -34,6 +35,7 @@ const detailReleases = ref<Release[]>([])
 const loadingReleases = ref(false)
 const releasesError = ref('')
 const downloadingRelease = ref('')
+const downloadingLatest = ref(false)
 
 const catLabels: Record<string, string> = {
   all: '全部',
@@ -69,6 +71,32 @@ const filteredMods = computed(() => {
   else if (sortMode.value === 'name') sorted.sort((a, b) => (a.repo || '').localeCompare(b.repo || ''))
   else if (sortMode.value === 'updated') sorted.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''))
   return sorted
+})
+
+// Track BrowseView-initiated downloads so we only auto-extract those
+const browseDLIds = new Set<string>()
+
+onMounted(() => {
+  EventsOn('download:complete', async (payload: any) => {
+    if (!browseDLIds.has(payload.id)) return
+    browseDLIds.delete(payload.id)
+    const fn = (payload.filename || '').toLowerCase()
+    if (!fn.endsWith('.zip')) return
+    try {
+      const cfg = await GetAppConfig()
+      if (!cfg.uncivPath) return
+      const modsDir = cfg.uncivPath + '/mods'
+      await ExtractMod(payload.filePath, modsDir)
+      CleanupTempFile(payload.filePath)
+      browseErr.value = `已安装模组: ${fn}`
+    } catch (e: any) {
+      browseErr.value = '安装失败: ' + e
+    }
+  })
+})
+
+onUnmounted(() => {
+  EventsOff('download:complete')
 })
 
 async function doBrowse() {
@@ -114,7 +142,6 @@ async function downloadRelease(rel: Release) {
   downloadingRelease.value = rel.tag_name
   try {
     const cfg = await GetAppConfig()
-    // Build download URL: prefer asset .zip, fallback to archive URL
     let dlUrl = ''
     let fname = rel.tag_name + '.zip'
     for (const a of rel.assets || []) {
@@ -127,12 +154,28 @@ async function downloadRelease(rel: Release) {
     if (!dlUrl) {
       dlUrl = `https://github.com/${detail.value.owner}/${detail.value.repo}/archive/refs/tags/${rel.tag_name}.zip`
     }
-    // Use mirror from config, default to auto
     const mirror = cfg.mirrorMode === 'auto' ? 'auto' : (cfg.selectedMirror || 'auto')
-    await StartDownloadWithMirror(dlUrl, fname, mirror)
+    const taskId = await StartDownloadWithMirror(dlUrl, fname, mirror)
+    browseDLIds.add(taskId)
     browseErr.value = `已添加下载: ${fname}`
   } catch (e: any) { browseErr.value = '下载失败: ' + e }
   finally { downloadingRelease.value = '' }
+}
+
+// Download default branch (main.zip) for repos without releases
+async function downloadLatest() {
+  if (!detail.value) return
+  downloadingLatest.value = true
+  try {
+    const cfg = await GetAppConfig()
+    const dlUrl = `https://github.com/${detail.value.owner}/${detail.value.repo}/archive/refs/heads/main.zip`
+    const fname = `${detail.value.repo}-main.zip`
+    const mirror = cfg.mirrorMode === 'auto' ? 'auto' : (cfg.selectedMirror || 'auto')
+    const taskId = await StartDownloadWithMirror(dlUrl, fname, mirror)
+    browseDLIds.add(taskId)
+    browseErr.value = `已添加下载: ${fname}`
+  } catch (e: any) { browseErr.value = '下载失败: ' + e }
+  finally { downloadingLatest.value = false }
 }
 
 async function translateDetail() {
@@ -210,7 +253,12 @@ function formatSize(bytes: number): string {
             </button>
           </div>
           <div v-if="loadingReleases" class="loading-sm">加载中...</div>
-          <div v-if="releasesError" class="error-sm">{{ releasesError }}</div>
+          <div v-if="releasesError" class="error-sm">
+            {{ releasesError }}
+            <button v-if="releasesError.includes('没有发布')" class="btn-go outline sm" style="margin-left:8px" :disabled="downloadingLatest" @click="downloadLatest">
+              {{ downloadingLatest ? '下载中...' : '⬇ 下载最新代码' }}
+            </button>
+          </div>
           <div v-if="detailReleases.length > 0" class="release-list">
             <div v-for="rel in detailReleases" :key="rel.tag_name" class="release-item">
               <div class="rel-left">

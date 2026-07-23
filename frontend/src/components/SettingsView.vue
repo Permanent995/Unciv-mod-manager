@@ -8,6 +8,7 @@ import IconEye from './icons/IconEye.vue'
 import IconArchive from './icons/IconArchive.vue'
 import IconGlobe from './icons/IconGlobe.vue'
 import IconRefresh from './icons/IconRefresh.vue'
+import IconSun from './icons/IconSun.vue'
 import IconCog from './icons/IconCog.vue'
 
 type MirrorInfo = {
@@ -17,7 +18,7 @@ type MirrorInfo = {
 
 const config = ref<app.AppConfig>({
   uncivPath: '', savedPaths: [], lastActivePath: '',
-  zoomLevel: 100, sidebarPos: 'left', sidebarWidth: 220, hiddenNav: [], theme: 'light',
+  zoomLevel: 100, sidebarPos: 'left', sidebarWidth: 220, hiddenNav: [], theme: 'light', themeVariant: 'pure',
   translateProvider: 'microsoft', translateCustomUrl: '', translateCustomKey: '', translateCustomModel: '',
   githubToken: '', mpServer: '', mpUid: '', mpPassword: '',
   customMirrors: [], mirrorMode: 'auto', selectedMirror: '', maxSaves: 100,
@@ -230,6 +231,20 @@ function formatTime(iso: string): string {
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-icon"><IconSun :size="24" /></div>
+        <div class="card-body">
+          <div class="card-title">浅色主题风格</div>
+          <div class="card-desc">仅亮色模式下生效</div>
+          <select v-model="config.themeVariant" @change="save" class="input-select">
+            <option value="pure">纯白</option>
+            <option value="warm">暖白</option>
+            <option value="blue">浅蓝</option>
+            <option value="green">浅绿</option>
+          </select>
         </div>
       </div>
 
@@ -483,4 +498,5 @@ function formatTime(iso: string): string {
 .migrate-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .migrate-row label { font-size: 12px; color: var(--text-secondary); white-space: nowrap; min-width: 90px; }
 .migrate-row select { flex: 1; padding: 6px 8px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 12px; }
+.input-select { padding: 6px 10px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 13px; cursor: pointer; }
 </style>

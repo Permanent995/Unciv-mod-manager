@@ -114,12 +114,13 @@ func (a *App) StartDownloadWithMirror(rawURL, filename, mirror string) (string, 
 	var candidates []string
 	switch {
 	case mirror == "" || mirror == "direct":
-		// direct only
 		candidates = []string{rawURL}
 	case mirror == "auto":
-		// all mirrors + direct fallback
-		for _, m := range a.getAllMirrors() {
-			candidates = append(candidates, mirrorURL(rawURL, m))
+		// Only use mirrors for GitHub URLs; go direct for everything else
+		if strings.Contains(rawURL, "github.com") || strings.Contains(rawURL, "githubusercontent.com") || strings.Contains(rawURL, "release-assets.githubusercontent.com") {
+			for _, m := range a.getAllMirrors() {
+				candidates = append(candidates, mirrorURL(rawURL, m))
+			}
 		}
 		candidates = append(candidates, rawURL)
 	default:
@@ -169,6 +170,7 @@ func (a *App) ValidateDownloadURL(rawURL string) (warning string, err error) {
 	safeDomains := []string{
 		"github.com/", "raw.githubusercontent.com/",
 		"objects.githubusercontent.com/", "codeload.github.com/",
+		"release-assets.githubusercontent.com/",
 	}
 	for _, m := range a.getAllMirrors() {
 		u, err := url.Parse(m)
@@ -189,7 +191,7 @@ func (a *App) ValidateDownloadURL(rawURL string) (warning string, err error) {
 func (a *App) StartDownload(url, filename string) (string, error) {
 	a.dlMu.Lock()
 	a.initDownloads()
-	a.pruneOldTasks()
+	a.pruneOldTasks(10)
 
 	active := 0
 	for _, t := range a.dlTasks {
@@ -235,23 +237,26 @@ func (a *App) startNextQueued() {
 	}
 }
 
-// pruneOldTasks removes completed/failed tasks older than 1 hour to prevent
-// unbounded map growth.
-func (a *App) pruneOldTasks() {
-	// Quick check: if fewer than 50 tasks, skip
-	if len(a.dlTasks) < 50 {
-		return
-	}
+// pruneOldTasks removes completed/failed tasks, keeping at most maxRecent.
+func (a *App) pruneOldTasks(maxRecent int) {
+	completed := []string{}
 	for id, t := range a.dlTasks {
 		if t.Status == "completed" || t.Status == "failed" {
-			// Clean up any leftover file references
+			completed = append(completed, id)
+		}
+	}
+	// Keep maxRecent most recent completed/failed, delete the rest
+	toDelete := len(completed) - maxRecent
+	for i := 0; i < toDelete && i < len(completed); i++ {
+		id := completed[i]
+		if t := a.dlTasks[id]; t != nil {
 			if t.file != nil {
 				t.file.Close()
 				t.file = nil
 			}
 			t.speedSamples = nil
-			delete(a.dlTasks, id)
 		}
+		delete(a.dlTasks, id)
 	}
 }
 
@@ -372,39 +377,27 @@ func (a *App) runDownload(t *dlTask) {
 retryHead:
 	// 1. HEAD to get total size + range support
 	resp, err := client.Head(t.URL)
-	if err != nil {
-		if t.tryNextMirror() {
-			LogWarn("下载", "镜像切换重试: id=%s new_url=%s", t.ID, t.URL)
-			t.ctx, t.cancel = context.WithCancel(context.Background())
-			goto retryHead
+	if err != nil || resp.StatusCode != http.StatusOK {
+		if resp != nil {
+			resp.Body.Close()
 		}
-		a.failTask(t, "无法连接: "+err.Error())
-		return
-	}
-	if resp.StatusCode != http.StatusOK {
-		if t.tryNextMirror() {
-			LogWarn("下载", "镜像切换重试（状态码%d）: id=%s new_url=%s", resp.StatusCode, t.ID, t.URL)
-			t.ctx, t.cancel = context.WithCancel(context.Background())
-			goto retryHead
-		}
-		a.failTask(t, fmt.Sprintf("服务器返回 %d，请检查 URL 是否为直链（GitHub 需用 archive/...zip 格式）", resp.StatusCode))
+		// HEAD failed — create file and fall back to single-thread GET
+		a.ensureDownloadFile(t)
+		a.singleThreadDownload(t)
 		return
 	}
 
 	// Reject non-binary responses (e.g. HTML pages served as zip)
 	ct := resp.Header.Get("Content-Type")
 	if strings.Contains(ct, "text/html") {
-		if t.tryNextMirror() {
-			LogWarn("下载", "镜像切换重试（返回HTML）: id=%s new_url=%s", t.ID, t.URL)
-			t.ctx, t.cancel = context.WithCancel(context.Background())
-			goto retryHead
-		}
-		a.failTask(t, "URL 返回的是网页而非文件，请使用直链（如 .../archive/...zip）")
+		resp.Body.Close()
+		a.singleThreadDownload(t)
 		return
 	}
 
 	totalSize, _ := strconv.ParseInt(resp.Header.Get("Content-Length"), 10, 64)
 	supportsRange := resp.Header.Get("Accept-Ranges") == "bytes"
+	resp.Body.Close()
 
 	t.mu.Lock()
 	t.TotalSize = totalSize
@@ -454,6 +447,7 @@ retryHead:
 			"filename": t.Filename,
 			"filePath": t.filePath,
 		})
+		a.pruneOldTasks(10)
 		a.startNextQueued()
 		return
 	}
@@ -574,6 +568,23 @@ func (a *App) concurrentDownload(t *dlTask, totalSize int64) {
 			return
 		}
 	}
+}
+
+// ensureDownloadFile creates t.file and t.filePath if not already set.
+func (a *App) ensureDownloadFile(t *dlTask) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.file != nil {
+		return
+	}
+	a.initDownloads()
+	filePath := filepath.Join(a.dlDir, t.Filename)
+	file, err := os.Create(filePath)
+	if err != nil {
+		return
+	}
+	t.file = file
+	t.filePath = filePath
 }
 
 // ── Single-thread fallback ────────────────────────────────────────────

@@ -119,6 +119,7 @@ type AppConfig struct {
 	MPPassword            string   `json:"mpPassword"`
 		CustomMirrors         []string `json:"customMirrors"`
 	MaxSaves              int      `json:"maxSaves"`
+	ThemeVariant          string   `json:"themeVariant"`
 		MirrorMode            string   `json:"mirrorMode"`
 		SelectedMirror        string   `json:"selectedMirror"`
 }
@@ -173,6 +174,9 @@ func (a *App) initConfig() {
 	}
 	if a.config.Theme == "" {
 		a.config.Theme = "light"
+	}
+	if a.config.ThemeVariant == "" {
+		a.config.ThemeVariant = "pure"
 	}
 	if a.config.TranslateProvider == "" {
 		a.config.TranslateProvider = "microsoft"

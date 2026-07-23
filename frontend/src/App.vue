@@ -22,6 +22,7 @@ const sidebarPos = ref('left')
 const sidebarWidth = ref(220)
 const hiddenNav = ref<string[]>([])
 const theme = ref('light')
+const themeVariant = ref('pure')
 
 onMounted(loadConfig)
 
@@ -32,7 +33,9 @@ async function loadConfig() {
   sidebarWidth.value = cfg.sidebarWidth || 200
   hiddenNav.value = cfg.hiddenNav || []
   theme.value = cfg.theme || 'light'
+  themeVariant.value = cfg.themeVariant || 'pure'
   applyTheme()
+  applyThemeVariant()
 }
 
 const zoomStyle = computed(() => ({ zoom: `${(zoom.value || 100) / 100}` }))
@@ -59,6 +62,18 @@ async function toggleTheme() {
 
 function applyTheme() {
   document.documentElement.setAttribute('data-theme', theme.value)
+}
+
+function applyThemeVariant() {
+  document.documentElement.setAttribute('data-theme-variant', themeVariant.value)
+}
+
+async function setThemeVariant(v: string) {
+  themeVariant.value = v
+  applyThemeVariant()
+  const cfg = await GetAppConfig()
+  cfg.themeVariant = v
+  await SaveAppConfig(cfg)
 }
 </script>
 
@@ -164,6 +179,26 @@ function applyTheme() {
   --z-drag: 10;
 
   /* 代码块（跨主题固定，引用亮色组的值） */
+}
+
+/* ── 浅色主题变体 ── */
+[data-theme="light"][data-theme-variant="warm"] {
+  --bg-primary: #fefaf5;
+  --bg-sidebar: #f5e6d3;
+  --bg-card: #faebd7;
+  --bg-input: #fffaf5;
+}
+[data-theme="light"][data-theme-variant="blue"] {
+  --bg-primary: #f4f8fb;
+  --bg-sidebar: #d6e5f3;
+  --bg-card: #e4eef7;
+  --bg-input: #f8fafc;
+}
+[data-theme="light"][data-theme-variant="green"] {
+  --bg-primary: #f2f9f5;
+  --bg-sidebar: #c8e6d4;
+  --bg-card: #d9efe2;
+  --bg-input: #f6fbf8;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }

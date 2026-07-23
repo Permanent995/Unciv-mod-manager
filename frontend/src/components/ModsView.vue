@@ -30,6 +30,7 @@ const restoring = ref(false)
 const deleting = ref(false)
 
 const delMsg = ref('')
+const scanErr = ref('')
 
 // ── Update check ──
 const updates = ref<{ folder: string; name: string; currentVer: string; latestVer: string; modUrl: string; hasUpdate: boolean }[]>([])
@@ -138,17 +139,18 @@ onMounted(async () => {
     uncivPath.value = config.uncivPath || ''
     await loadMods()
   } catch (e: any) {
-    delMsg.value = '加载失败: ' + e
+    scanErr.value = '加载失败: ' + e
   }
 })
 
 async function loadMods() {
   loading.value = true
+  scanErr.value = ''
   try {
     mods.value = await ScanMods()
     if (mods.value.length > 0 && !selected.value) selected.value = mods.value[0]
   } catch (e: any) {
-    delMsg.value = '扫描模组失败: ' + e
+    scanErr.value = '扫描模组失败: ' + e
   } finally { loading.value = false }
 }
 
@@ -219,6 +221,7 @@ function catColor(c: string): string {
     </div>
 
     <!-- Update notification -->
+    <div v-if="scanErr" class="scan-error">{{ scanErr }}</div>
     <div v-if="delMsg" class="toast">{{ delMsg }}</div>
     <div v-if="updateMsg" class="update-banner" :class="updateMsgType">
       <span>{{ updateMsg }}</span>
@@ -405,6 +408,7 @@ function catColor(c: string): string {
 .backup-actions { display: flex; gap: 4px; }
 .loading-sm { font-size: 12px; color: var(--text-muted); padding: 8px 0; }
 .toast { font-size: 12px; color: var(--success); padding: 6px 0; }
+.scan-error { font-size: 13px; color: var(--danger); padding: 6px 0; }
 
 .readme-section { margin-top: 20px; }
 .readme-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }

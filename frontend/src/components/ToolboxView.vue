@@ -149,8 +149,24 @@ const dlCompleted = computed(() => dlTasks.value.filter(t => t.status === 'compl
 const dlFailed = computed(() => dlTasks.value.filter(t => t.status === 'failed'))
 
 function extractFilename(url: string): string {
-  try { return url.split('/').filter(Boolean).pop() || 'download' }
-  catch { return 'download' }
+  try {
+    // Try to extract from query params first (Content-Disposition style)
+    const qm = url.indexOf('?')
+    if (qm > 0) {
+      const qs = url.slice(qm + 1)
+      for (const p of qs.split('&')) {
+        const [k, v] = p.split('=')
+        if (k === 'filename' || k === 'rscd') {
+          const m = decodeURIComponent(v || '').match(/filename[=:]\s*([^;&]+)/i)
+          if (m) return m[1].trim()
+        }
+      }
+    }
+    // Fallback: last path segment, strip query
+    let name = url.split('/').filter(Boolean).pop() || 'download'
+    name = name.split('?')[0]
+    return decodeURIComponent(name)
+  } catch { return 'download' }
 }
 function formatSize(n: number): string {
   if (!n || n <= 0) return '?'
