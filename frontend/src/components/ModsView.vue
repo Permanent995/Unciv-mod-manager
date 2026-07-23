@@ -5,6 +5,7 @@ import { ReadModReadme, ReadModPreview } from '../../wailsjs/go/app/App'
 import { ListBackups, RestoreBackup, DeleteBackup } from '../../wailsjs/go/app/App'
 import { BackupMod } from '../../wailsjs/go/app/App'
 import { TranslateText } from '../../wailsjs/go/app/App'
+import { marked } from 'marked'
 import { CheckModUpdates, DownloadAllUpdates } from '../../wailsjs/go/app/App'
 import { app } from '../../wailsjs/go/models'
 
@@ -16,6 +17,7 @@ const uncivPath = ref('')
 const sortMode = ref<'name' | 'category' | 'size'>('name')
 const selected = ref<ModInfo | null>(null)
 const readme = ref('')
+const renderedReadme = computed(() => readme.value ? marked(readme.value) : '')
 const readmeLoading = ref(false)
 const translated = ref('')
 const translating = ref(false)
@@ -317,10 +319,10 @@ function catColor(c: string): string {
             </button>
           </div>
           <div v-if="readmeLoading" class="readme-loading">加载中...</div>
-          <pre v-else class="readme-text">{{ readme }}</pre>
+          <div v-else class="readme-text" v-html="renderedReadme"></div>
           <div v-if="translated" class="translated-section">
             <h3>📝 中文翻译</h3>
-            <pre class="readme-text">{{ translated }}</pre>
+            <div class="readme-text" v-html="translated"></div>
           </div>
         </div>
       </div>

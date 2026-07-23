@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { SearchOnlineMods, FetchReadme, FetchReleases, StartDownloadWithMirror, GetAppConfig } from '../../wailsjs/go/app/App'
 import { TranslateText } from '../../wailsjs/go/app/App'
+import { marked } from 'marked'
 
 type OnlineMod = {
   name: string; owner: string; repo: string; description: string
@@ -23,6 +24,7 @@ const loadedMods = ref(false)
 
 const detail = ref<OnlineMod | null>(null)
 const detailReadme = ref('')
+const renderedReadme = computed(() => detailReadme.value ? marked(detailReadme.value) : '')
 const detailLoading = ref(false)
 const detailTranslating = ref(false)
 const detailTranslated = ref('')
@@ -236,7 +238,7 @@ function formatSize(bytes: number): string {
         <div class="detail-readme" v-if="detailReadme || detailLoading">
           <h3>📖 README</h3>
           <div v-if="detailLoading" class="loading-sm">加载中...</div>
-          <pre v-else class="readme-text">{{ detailReadme }}</pre>
+          <div v-else class="readme-text" v-html="renderedReadme"></div>
         </div>
         <div v-if="detailReadme" class="detail-section">
           <button class="btn-go outline sm" :disabled="detailTranslating" @click="translateDetail">
@@ -245,7 +247,7 @@ function formatSize(bytes: number): string {
         </div>
         <div v-if="detailTranslated" class="detail-readme">
           <h3>📝 中文翻译</h3>
-          <pre class="readme-text">{{ detailTranslated }}</pre>
+          <div class="readme-text" v-html="detailTranslated"></div>
         </div>
       </div>
 
