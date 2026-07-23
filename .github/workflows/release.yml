@@ -4,9 +4,6 @@ on:
   push:
     tags: ['v*']
 
-env:
-  GOTOOLCHAIN: auto
-
 jobs:
   build:
     runs-on: windows-latest
